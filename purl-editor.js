@@ -1,49 +1,47 @@
-var validateAndSave = function() {
-    // VALIDATION SHOULD BE DONE FIRST
-    editor.save();
-    var code = document.getElementById("code").value;
-    var filename = "Untitled.yml";
-    var download_link = document.createElement("a");
-    download_link.download = filename;
+var validate = function() {
+  // Save the contents of the editor to its associated text area:
+  editor.save();
 
-    // dummy name for the hidden link:
-    download_link.innerHTML = "LINKTITLE";
+  // Extract the code from the text area:
+  var code = document.getElementById("code").value;
 
-    window.URL = window.URL || window.webkitURL;
-
-    var code_blob = new Blob([code], {type:'text/plain'});
-    download_link.href = window.URL.createObjectURL(code_blob);
-
-    download_link.onclick = destroyClickedElement;
-    download_link.style.display = "none";
-    document.body.appendChild(download_link);
-    download_link.click();
+  // Embed it into a POST request and send it to the server for processing:
+  var request = new XMLHttpRequest();
+  request.onreadystatechange = function() { //Call a function when the state changes.
+    if(request.readyState == 4) {
+      // Request finished. Do processing here.
+      console.log("Status: " + request.status + ", Text: " + request.responseText);
+    }
+  }
+  request.open('POST', 'http://127.0.0.1:5000/validate', true);
+  request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+  request.send("code=" + encodeURIComponent(code));
 };
 
 function destroyClickedElement(event) {
-    document.body.removeChild(event.target);
+  document.body.removeChild(event.target);
 }
 
 var editor = CodeMirror.fromTextArea(document.getElementById("code"), {
-    mode: "text/x-yaml",
-    theme: "default",
-    lineNumbers: true,
-    matchBrackets: true,
-    showCursorWhenSelecting: true,
-    extraKeys: {
-        "F11": function(cm) {
-            if (!cm.getOption("fullScreen"))
-                alert("To leave fullscreen mode, press F11 or Esc");
-            cm.setOption("fullScreen", !cm.getOption("fullScreen"));
-        },
-        "Esc": function(cm) {
-            if (cm.getOption("fullScreen"))
-                cm.setOption("fullScreen", false);
-        },
-        Tab: function(cm) {
-            var spaces = Array(cm.getOption("indentUnit") + 1).join(" ");
-            cm.replaceSelection(spaces);
-        },
-        "Ctrl-S": validateAndSave,
-    }
+  mode: "text/x-yaml",
+  theme: "default",
+  lineNumbers: true,
+  matchBrackets: true,
+  showCursorWhenSelecting: true,
+  extraKeys: {
+    "F11": function(cm) {
+      if (!cm.getOption("fullScreen"))
+        alert("To leave fullscreen mode, press F11 or Esc");
+      cm.setOption("fullScreen", !cm.getOption("fullScreen"));
+    },
+    "Esc": function(cm) {
+      if (cm.getOption("fullScreen"))
+        cm.setOption("fullScreen", false);
+    },
+    Tab: function(cm) {
+      var spaces = Array(cm.getOption("indentUnit") + 1).join(" ");
+      cm.replaceSelection(spaces);
+    },
+    "Ctrl-S": validate,
+  }
 });
