@@ -1,0 +1,18 @@
+.preformatted {
+    font-family: monospace;
+    white-space: pre-wrap;
+    font-size: 75%;
+}
+
+#validation-area {
+    margin-top: 2em;
+    width: 100%;
+    height: auto;
+    background-color: #F5F5F5;
+    border: 4px groove;
+    padding: 1em;
+}
+
+h2 {
+    margin-top: 0.5em;
+}
