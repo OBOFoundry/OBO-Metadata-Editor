@@ -18,10 +18,6 @@ var validate = function() {
   request.send("code=" + encodeURIComponent(code));
 };
 
-function destroyClickedElement(event) {
-  document.body.removeChild(event.target);
-}
-
 var editor = CodeMirror.fromTextArea(document.getElementById("code"), {
   mode: "text/x-yaml",
   theme: "default",
@@ -30,8 +26,18 @@ var editor = CodeMirror.fromTextArea(document.getElementById("code"), {
   showCursorWhenSelecting: true,
   extraKeys: {
     "F11": function(cm) {
-      if (!cm.getOption("fullScreen"))
-        alert("To leave fullscreen mode, press F11 or Esc");
+      if (!cm.getOption("fullScreen")) {
+        bootbox.dialog({
+          title: 'Entering fullscreen editor mode',
+          message: 'To leave fullscreen mode, press F11 or Esc',
+          closeButton: false,
+          buttons: {
+            ok: {
+              label: 'Ok',
+            },
+          },
+        });
+      }
       cm.setOption("fullScreen", !cm.getOption("fullScreen"));
     },
     "Esc": function(cm) {

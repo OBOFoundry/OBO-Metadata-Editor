@@ -17,7 +17,7 @@ schema = json.load(open(schemafile))
 @app.route('/validate', methods=['POST'])
 def validate():
   if request.form.get('code') is None:
-    return Response(status=400)
+    return Response("Malformed POST request", status=400)
 
   try:
     yaml_source = yaml.load(request.form['code'])

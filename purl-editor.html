@@ -1,12 +1,25 @@
 <!doctype html>
 
-<title>My Editor</title>
+<title>OBO PURL YAML Code Editor</title>
 <meta charset="utf-8"/>
+
+<!-- JQuery and JQuery UI CDNs -->
+<script src="https://code.jquery.com/jquery-3.3.1.js"
+	      integrity="sha256-2Kok7MbOyxpgUVvAk/HJ2jigOSYS2auK4Pfzbm7uH60="
+	      crossorigin="anonymous"></script>
+<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"
+			  integrity="sha256-T0Vest3yCU7pafRw9r+settMBX6JkKN06dqBnpQ8d30="
+			  crossorigin="anonymous"></script>
+
+<!-- Bootstrap and bootbox dependencies -->
+<link rel="stylesheet" type="text/css" href="3pp/bootstrap/css/bootstrap.min.css"/>
+<script src="3pp/bootstrap/js/bootstrap.min.js"></script>
+<script src="3pp/bootbox/bootbox.min.js"></script>
 
 <!-- CodeMirror dependencies -->
 <script src="3pp/codemirror/lib/codemirror.js"></script>
-<link rel="stylesheet" href="3pp/codemirror/lib/codemirror.css">
-<link rel="stylesheet" href="3pp/codemirror/addon/display/fullscreen.css">
+<link rel="stylesheet" href="3pp/codemirror/lib/codemirror.css"/>
+<link rel="stylesheet" href="3pp/codemirror/addon/display/fullscreen.css"/>
 <link rel="stylesheet" href="3pp/codemirror/theme/default.css">
 <script src="3pp/codemirror/addon/dialog/dialog.js"></script>
 <script src="3pp/codemirror/addon/search/searchcursor.js"></script>
@@ -15,15 +28,17 @@
 <script src="3pp/codemirror/mode/yaml/yaml.js"></script>
 
 <script src="purl-editor.js" defer></script>
+<link rel="stylesheet" href="purl-editor.css"/>
 
-<h2>Edit away!!!</h2>
+<div class="container-fluid">
+<h2>OBO PURL YAML Code Editor for AGRO</h2>
 <div>
   Press F11 inside the editor to maximize editor space (Esc to revert)
 </div>
 
 <hr/>
 
-<textarea id="code" name="code">
+<textarea id="code">
 # PURL configuration for http://purl.obolibrary.org/obo/agro
 
 idspace: AGRO
@@ -58,4 +73,6 @@ entries:
 </textarea>
 
 <hr/>
-<button onclick="validate()">Validate</button>
+
+<button class="btn btn-primary" onclick="validate()">Validate</button>
+</div>
