@@ -27,6 +27,7 @@ var editor = CodeMirror.fromTextArea(document.getElementById("code"), {
   }
 });
 
+
 var validate = function() {
   // Save the contents of the editor to its associated text area:
   editor.save();
@@ -34,32 +35,107 @@ var validate = function() {
   // Extract the code from the text area:
   var code = document.getElementById("code").value;
 
-  // Clear the validation area:
-  var validationArea = document.getElementById("validation-area");
-  validationArea.style.color = "#000000";
-  validationArea.innerHTML = "Validating ...";
+  // Clear the status area:
+  var statusArea = document.getElementById("status-area");
+  statusArea.style.color = "#000000";
+  statusArea.innerHTML = "Validating ...";
 
   // Embed the code into a POST request and send it to the server for processing:
   var request = new XMLHttpRequest();
-  request.onreadystatechange = function() { //Call a function when the state changes.
+  request.onreadystatechange = function() {
     if (request.readyState === 4) {
       if (request.status === 200) {
-        validationArea.style.color = "#00CD00";
-        validationArea.innerHTML = "Validation successful";
-        // TODO: Enable the Save button here
+        statusArea.style.color = "#00CD00";
+        statusArea.innerHTML = "Validation successful";
+        // Enable the save button:
+        document.getElementById("save-btn").disabled = false;
       }
       else {
-        // Display the error message in the validation area. Note that we must replace any angle
+        // Display the error message in the status area. Note that we must replace any angle
         // angle brackets with HTML escape codes.
         alertText = "Validation failed.\n\n" +
           request.responseText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
         alertText = '<div class="preformatted">' + alertText + '</div>';
-        validationArea.style.color = "#FF0000";
-        validationArea.innerHTML = alertText;
+        statusArea.style.color = "#FF0000";
+        statusArea.innerHTML = alertText;
+        document.getElementById("save-btn").disabled = true;
       }
     }
   }
   request.open('POST', 'http://127.0.0.1:5000/validate', true);
   request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
   request.send("code=" + encodeURIComponent(code));
+};
+
+
+// Disable the save button when the contents of the editor are changed:
+editor.on("change", function() {
+  document.getElementById("save-btn").disabled = true;
+});
+
+
+// Disable the editor if the user refreshes or otherwise leaves the page:
+window.onbeforeunload = function() {
+  document.getElementById("save-btn").disabled = true;
+}
+
+
+var save = function() {
+  // Get a confirmation from the user:
+  bootbox.confirm({ 
+    size: "large",
+    closeButton: false,
+    title: "Confirm save",
+    message: 'By saving now <b>you will initiate a pull request</b> in the purl.obolibrary.org ' +
+      'repository containing the changes you have made to this file. Please confirm that you ' +
+      'really want to do this.',
+    buttons: {
+      confirm: {
+        label: 'Save',
+        className: 'btn-danger'
+      },
+      cancel: {
+        label: 'Cancel',
+        className: 'btn-primary'
+      }
+    },
+    callback: function(result) {
+      if (result) {
+        // Disable the save button:
+        document.getElementById("save-btn").disabled = true;
+
+        // Extract the code from the text area:
+        var code = document.getElementById("code").value;
+
+        // Clear the status area:
+        var statusArea = document.getElementById("status-area");
+        statusArea.style.color = "#000000";
+        statusArea.innerHTML = "Saving ...";
+
+        // Embed the code into a POST request and send it to the server for processing:
+        var request = new XMLHttpRequest();
+        request.onreadystatechange = function() {
+          if (request.readyState === 4) {
+            if (request.status === 200) {
+              statusArea.style.color = "#00CD00";
+              statusArea.innerHTML = "Save successful";
+            }
+            else {
+              // Display the error message in the status area. Note that we must replace any angle
+              // angle brackets with HTML escape codes.
+              alertText = "Save failed.\n\n" +
+                request.responseText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+              alertText = '<div class="preformatted">' + alertText + '</div>';
+              statusArea.style.color = "#FF0000";
+              statusArea.innerHTML = alertText;
+            }
+          }
+        }
+        request.open('POST', 'http://127.0.0.1:5000/save', true);
+        request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+        // TODO: agro.yml is hard-coded ...
+        request.send("filename=" + 'agro.yml' + '&code=' + encodeURIComponent(code))
+      }
+    }
+  });
 };

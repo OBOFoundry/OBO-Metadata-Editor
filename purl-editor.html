@@ -36,8 +36,6 @@
   Press F11 inside the editor to maximize editor space (Esc to revert)
 </div>
 
-<hr/>
-
 <textarea id="code">
 # PURL configuration for http://purl.obolibrary.org/obo/agro
 
@@ -72,11 +70,11 @@ entries:
   replacement: https://raw.githubusercontent.com/AgriculturalSemantics/agro/master/imports/
 </textarea>
 
-<hr/>
+<button id="validate-btn" class="btn btn-primary" onclick="validate()">Validate</button>
+<button id="save-btn" class="btn btn-danger" onclick="save()" disabled>Save</button>
 
-<button class="btn btn-primary" onclick="validate()">Validate</button>
 
 <!-- Messages received when pressing the 'Validate' button are displayed in this div. -->
-<div id="validation-area"/>
+<div id="status-area"/>
 
 </div>

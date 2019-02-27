@@ -1,10 +1,19 @@
+.CodeMirror {
+    background-color: #FFFFF0;
+    border: 3px solid;
+    border-color: #C0C0C0; /*#F5F5F5;*/
+    border-radius: 12px;
+    margin-top: 1em;
+    margin-bottom: 1em;
+}
+
 .preformatted {
     font-family: monospace;
     white-space: pre-wrap;
     font-size: 75%;
 }
 
-#validation-area {
+#status-area {
     margin-top: 2em;
     width: 100%;
     height: auto;

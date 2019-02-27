@@ -26,3 +26,15 @@ def validate():
     return Response(format(err), status=400)
 
   return Response(status=200)
+
+
+@app.route('/save', methods=['POST'])
+def save():
+  filename = request.form.get('filename')
+  code = request.form.get('code')
+  if filename is None or code is None:
+    return Response("Malformed POST request", status=400)
+
+  # TODO: Implement git interface, pull request, etc.
+  
+  return Response(status=200)
