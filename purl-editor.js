@@ -24,8 +24,27 @@ var editor = CodeMirror.fromTextArea(document.getElementById("code"), {
       cm.replaceSelection(spaces);
     },
     "Ctrl-S": validate,
+    "Ctrl-Space": "autocomplete"
   }
 });
+
+
+// Add anyword hinting to the editor:
+CodeMirror.commands.autocomplete = function(cm) {
+  cm.showHint({hint: CodeMirror.hint.anyword});
+}
+
+
+// Disable the save button when the contents of the editor are changed:
+editor.on("change", function() {
+  document.getElementById("save-btn").disabled = true;
+});
+
+
+// Disable the editor if the user refreshes or otherwise leaves the page:
+window.onbeforeunload = function() {
+  document.getElementById("save-btn").disabled = true;
+}
 
 
 var validate = function() {
@@ -66,18 +85,6 @@ var validate = function() {
   request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
   request.send("code=" + encodeURIComponent(code));
 };
-
-
-// Disable the save button when the contents of the editor are changed:
-editor.on("change", function() {
-  document.getElementById("save-btn").disabled = true;
-});
-
-
-// Disable the editor if the user refreshes or otherwise leaves the page:
-window.onbeforeunload = function() {
-  document.getElementById("save-btn").disabled = true;
-}
 
 
 var save = function() {
