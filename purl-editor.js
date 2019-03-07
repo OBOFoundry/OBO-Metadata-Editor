@@ -29,10 +29,25 @@ var editor = CodeMirror.fromTextArea(document.getElementById("code"), {
 });
 
 
-// Add anyword hinting to the editor:
+// Add "anyword" hinting to the editor:
 CodeMirror.commands.autocomplete = function(cm) {
-  cm.showHint({hint: CodeMirror.hint.anyword});
+  cm.showHint({hint: CodeMirror.hint.anyword, completeSingle: false});
 }
+
+
+// Activate hint popup on any letter key press
+editor.on("keyup", function (cm, event) {
+  // If the autocompletion popup is not already active, and if the user has typed a letter,
+  // then activate the autocompletion popup:
+  if (!cm.state.completionActive) {
+    // 'event.which' is preferred, but IE8 does not support it:
+    var keyPressed = event.which || event.keyCode;
+    // Letter keys only:
+    if (keyPressed > 64 && keyPressed < 91){
+      CodeMirror.commands.autocomplete(cm);
+    }
+  }
+});
 
 
 // Disable the save button when the contents of the editor are changed:
@@ -59,14 +74,19 @@ var validate = function() {
   statusArea.style.color = "#000000";
   statusArea.innerHTML = "Validating ...";
 
-  // Embed the code into a POST request and send it to the server for processing:
+  // Embed the code into a POST request and send it to the server for processing.
+  // If the validation is successful, enable the Save button, otherwise disable it.
   var request = new XMLHttpRequest();
   request.onreadystatechange = function() {
     if (request.readyState === 4) {
-      if (request.status === 200) {
+      if (!request.status) {
+        statusArea.style.color = "#FF0000";
+        statusArea.innerHTML = "Problem communicating with server";
+        document.getElementById("save-btn").disabled = true;
+      }
+      else if (request.status === 200) {
         statusArea.style.color = "#00CD00";
         statusArea.innerHTML = "Validation successful";
-        // Enable the save button:
         document.getElementById("save-btn").disabled = false;
       }
       else {
@@ -119,11 +139,15 @@ var save = function() {
         statusArea.style.color = "#000000";
         statusArea.innerHTML = "Saving ...";
 
-        // Embed the code into a POST request and send it to the server for processing:
+        // Embed the code into a POST request and send it to the server for processing.
         var request = new XMLHttpRequest();
         request.onreadystatechange = function() {
           if (request.readyState === 4) {
-            if (request.status === 200) {
+            if (!request.status) {
+              statusArea.style.color = "#FF0000";
+              statusArea.innerHTML = "Problem communicating with server";
+            }
+            else if (request.status === 200) {
               statusArea.style.color = "#00CD00";
               statusArea.innerHTML = "Save successful";
             }
