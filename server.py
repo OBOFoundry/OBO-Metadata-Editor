@@ -23,6 +23,31 @@ schema = json.load(open(schemafile))
 
 @app.route('/validate', methods=['POST'])
 def validate():
+  def get_error_start(code, start, block_label=None, item=-1):
+    print("Searching from line {} for{}block: '{}'"
+          .format(start+1, ' item #{} of '.format(item+1) if item >= 0 else ' ', block_label))
+    pattern = '^\s*{}\s*:.*$'.format('\w+' if not block_label else '-?\s*{}'.format(block_label))
+    codelines = code.splitlines()[start:]
+    block_start_found = False
+    curr_item = 0
+    for i, line in enumerate(codelines):
+      if re.fullmatch(pattern, line):
+        block_start_found = True
+        start = start+i
+        print("Found the start of the block: '{}' at line {}".format(line, start+1))
+        if item < 0:
+          return start
+      elif block_start_found and item >= 0 and re.match('\s*-\s*\w+:', line):
+        print("Found item #{} of block: '{}' at line {}. Line is: '{}'"
+              .format(curr_item+1, block_label, start+i+1, line))
+        if curr_item == item:
+          start = start+i
+          return start
+        curr_item += 1
+
+    print("*** Hey we shouldn't be here! ***")
+    return start
+
   if request.form.get('code') is None:
     return Response("Malformed POST request", status=400)
 
@@ -34,31 +59,6 @@ def validate():
     # TODO: THIS NEEDS TO BE SENT BACK AS A JSON JUST AS BELOW:
     return Response(format(err), status=400)
   except jsonschema.exceptions.ValidationError as err:
-    def get_error_start(start, block_label=None, item=-1):
-      print("Searching from line {} for{}block: '{}'"
-            .format(start+1, ' item #{} of '.format(item+1) if item >= 0 else ' ', block_label))
-      pattern = '^\s*{}\s*:.*$'.format('\w+' if not block_label else '-?\s*{}'.format(block_label))
-      codelines = code.splitlines()[start:]
-      block_start_found = False
-      curr_item = 0
-      for i, line in enumerate(codelines):
-        if re.fullmatch(pattern, line):
-          block_start_found = True
-          start = start+i
-          print("Found the start of the block: '{}' at line {}".format(line, start+1))
-          if item < 0:
-            return start
-        elif block_start_found and item >= 0 and re.match('\s*-\s*\w+:', line):
-          print("Found item #{} of block: '{}' at line {}. Line is: '{}'"
-                .format(curr_item+1, block_label, start+i+1, line))
-          if curr_item == item:
-            start = start+i
-            return start
-          curr_item += 1
-
-      print("*** Hey we shouldn't be here! ***")
-      return start
-
     print("Determining line number for error: {}".format(list(err.absolute_path)))
     start = 0
     if not err.absolute_path:
@@ -68,10 +68,10 @@ def validate():
       for component in err.absolute_path:
         if type(component) is str:
           block_label = component
-          start = get_error_start(start, block_label)
+          start = get_error_start(code, start, block_label)
           print("So far we know that error begins at line {}".format(start+1))
         elif type(component) is int:
-          start = get_error_start(start, block_label, component)
+          start = get_error_start(code, start, block_label, component)
           print("So far we know that error begins at line {}".format(start+1))
 
     return (jsonify({'summary': format(err.message),
