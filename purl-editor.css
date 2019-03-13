@@ -13,6 +13,11 @@
     font-size: 75%;
 }
 
+.line-error {
+    background: #FBC2C4 !important;
+    color: #8a1f11 !important;
+}
+
 #status-area {
     margin-top: 2em;
     width: 100%;

@@ -56,8 +56,10 @@ def validate():
     yaml_source = yaml.load(code)
     jsonschema.validate(yaml_source, schema)
   except yaml.YAMLError as err:
-    # TODO: THIS NEEDS TO BE SENT BACK AS A JSON JUST AS BELOW:
-    return Response(format(err), status=400)
+    return (jsonify({'summary': "YAML parsing error",
+                     'line_number': -1,
+                     'details': format(err)}),
+            400)
   except jsonschema.exceptions.ValidationError as err:
     print("Determining line number for error: {}".format(list(err.absolute_path)))
     start = 0

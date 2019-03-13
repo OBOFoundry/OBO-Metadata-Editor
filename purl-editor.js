@@ -50,6 +50,7 @@ var purlYamlHint = function(editor, options) {
     /* Finds the nearest root-level directive above the current line (if one exists) and returns its
        name. */
     var lineNum = cursor.line;
+    // TODO: INCLUDE ':' AND '/'
     var matches = /^(\w+):/.exec(editor.getLine(lineNum));
     while (!matches && lineNum > 0) {
       matches = /^(\w+):/.exec(editor.getLine(--lineNum));
@@ -89,7 +90,7 @@ var purlYamlHint = function(editor, options) {
   // the letters that have been typed so far.
   var prevString = thisLine.slice(0, currStart);
   if (prevString === '') {
-    return {list: pruneReplacementList([{displayText: 'base_redirect: ', text: 'base_redirect: '},
+    return {list: pruneReplacementList([{displayText: 'base_redirect:', text: 'base_redirect: '},
                                         {displayText: 'base_url:', text: 'base_url: '},
                                         {displayText: 'entries:', text: 'entries:\n- '},
                                         {displayText: 'example_terms:', text: 'example_terms:\n- '},
@@ -141,6 +142,7 @@ editor.on("keyup", function (cm, event) {
   if (!cm.state.completionActive) {
     // Letter keys only:
     keyPressed = event.key.toLowerCase();
+    // TODO: INCLUDE ':' AND '/'
     if (keyPressed >= 'a' && keyPressed <= 'z') {
       CodeMirror.commands.autocomplete(cm);
     }
@@ -190,12 +192,21 @@ var validate = function() {
       else {
         // Display the error message in the status area. Note that we must replace any angle
         // angle brackets with HTML escape codes.
-        alertText = "Validation failed.\n\n" +
-          request.responseText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        var response = JSON.parse(request.responseText);
+        alertText = "Validation failed";
+        alertText += response.line_number >= 0 ? (". At line " + response.line_number + ": ") : ": ";
+        alertText += response.summary + "\n\n" + "Details:\n---\n" + response.details;
+
+        alertText = alertText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
         alertText = '<div class="preformatted">' + alertText + '</div>';
         statusArea.style.color = "#FF0000";
         statusArea.innerHTML = alertText;
         document.getElementById("save-btn").disabled = true;
+        if (response.line_number >= 0) {
+          editor.markText({line: response.line_number - 1, ch: 0},
+                          {line: response.line_number, ch: 0},
+                          {className: "line-error", clearOnEnter: true});
+        }
       }
     }
   }
