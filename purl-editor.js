@@ -1,4 +1,5 @@
 var editor = CodeMirror.fromTextArea(document.getElementById("code"), {
+  /* Instantiates a CodeMirror editor object from the HTML text area called "code" */
   mode: "text/x-yaml",
   theme: "default",
   lineNumbers: true,
@@ -6,6 +7,8 @@ var editor = CodeMirror.fromTextArea(document.getElementById("code"), {
   showCursorWhenSelecting: true,
   extraKeys: {
     "F11": function(cm) {
+      // If F11 is pressed and we are not already in fullscreen mode, pop up a dialog informing the
+      // user how to get out of it:
       if (!cm.getOption("fullScreen")) {
         bootbox.alert({
           title: 'Entering fullscreen editor mode',
@@ -13,18 +16,19 @@ var editor = CodeMirror.fromTextArea(document.getElementById("code"), {
           closeButton: false,
         });
       }
+      // Toggle fullscreen mode:
       cm.setOption("fullScreen", !cm.getOption("fullScreen"));
     },
     "Esc": function(cm) {
+      // Pressing escape leaves fullscreen mode if we are currently in it:
       if (cm.getOption("fullScreen"))
         cm.setOption("fullScreen", false);
     },
     Tab: function(cm) {
+      // Pressing the tab key actually produces spaces, not tabs:
       var spaces = Array(cm.getOption("indentUnit") + 1).join(" ");
       cm.replaceSelection(spaces);
     },
-    "Ctrl-S": validate,
-    "Ctrl-Space": "autocomplete"
   }
 });
 
@@ -38,10 +42,10 @@ var purlYamlHint = function(editor, options) {
 
   // Look left and right from the current cursor position to have in view the entire word at that
   // location:
-  while (currStart && /[\w$]+/.test(thisLine.charAt(currStart - 1))) {
+  while (currStart && /[:\/\w]+/.test(thisLine.charAt(currStart - 1))) {
     --currStart;
   }
-  while (currEnd && /[\w$]+/.test(thisLine.charAt(currEnd))) {
+  while (currEnd && /[:\/\w]+/.test(thisLine.charAt(currEnd))) {
     ++currEnd;
   }
   var currWord = thisLine.slice(currStart, currEnd);
@@ -50,7 +54,6 @@ var purlYamlHint = function(editor, options) {
     /* Finds the nearest root-level directive above the current line (if one exists) and returns its
        name. */
     var lineNum = cursor.line;
-    // TODO: INCLUDE ':' AND '/'
     var matches = /^(\w+):/.exec(editor.getLine(lineNum));
     while (!matches && lineNum > 0) {
       matches = /^(\w+):/.exec(editor.getLine(--lineNum));
@@ -86,7 +89,7 @@ var purlYamlHint = function(editor, options) {
     }
   };
 
-  // Send back a completion hint lists contextualised to the current current position as well as to
+  // Send back a completion hint list contextualised to the current position as well as to
   // the letters that have been typed so far.
   var prevString = thisLine.slice(0, currStart);
   if (prevString === '') {
@@ -105,13 +108,24 @@ var purlYamlHint = function(editor, options) {
                                         {displayText: 'custom', text: 'custom'}]),
             from: from, to: to};
   }
-  else if (/^base_url:\s+$/.test(prevString)) {
+  else if (/^base_url:\s+$/.test(prevString) && !(/^\/obo\//.test(currWord))) {
     return {list: pruneReplacementList([{displayText: '/obo/', text: '/obo/'}]),
             from: from, to: to};
   }
   else if (/^-\s+$/.test(prevString) && currContext() === 'tests') {
     return {list: pruneReplacementList([{displayText: 'from:', text: 'from: \n  to: '},
                                         {displayText: 'to:', text: 'to: '}]),
+            from: from, to: to};
+  }
+  else if (/^-\s+from:\s+$/.test(prevString) && currContext() === 'tests' && !(/^\//.test(currWord))) {
+    return {list: pruneReplacementList([{displayText: '/', text: '/'}]),
+            from: from, to: to};
+  }
+  else if (/^\s+to:\s+$/.test(prevString) && currContext() === 'tests' &&
+           !(/^(https?|ftp):\/\//.test(currWord))) {
+    return {list: pruneReplacementList([{displayText: 'ftp://', text: 'ftp://'},
+                                        {displayText: 'http://', text: 'http://'},
+                                        {displayText: 'https://', text: 'https://'}]),
             from: from, to: to};
   }
   else if (/^-\s+$/.test(prevString) && currContext() === 'entries') {
@@ -124,6 +138,25 @@ var purlYamlHint = function(editor, options) {
     return {list: pruneReplacementList([{displayText: 'replacement:', text: 'replacement: '},
                                         {displayText: 'status:', text: 'status: '},
                                         {displayText: 'tests:', text: 'tests:\n  - from: \n    to: '}]),
+            from: from, to: to};
+  }
+  else if (/^-\s+(exact|prefix):\s+$/.test(prevString) && currContext() === 'entries' &&
+           !(/^\//.test(currWord))) {
+    return {list: pruneReplacementList([{displayText: '/', text: '/'}]),
+            from: from, to: to};
+  }
+  else if (/^\s+replacement:\s+$/.test(prevString) && currContext() === 'entries' &&
+           !(/^(https?|ftp):\/\//.test(currWord))) {
+    return {list: pruneReplacementList([{displayText: 'ftp://', text: 'ftp://'},
+                                        {displayText: 'http://', text: 'http://'},
+                                        {displayText: 'https://', text: 'https://'}]),
+            from: from, to: to};
+  }
+  else if (/^\s+status:\s+$/.test(prevString) && currContext() === 'entries' &&
+           !(/^(permanent|temporary|see other):\/\//.test(currWord))) {
+    return {list: pruneReplacementList([{displayText: 'permanent', text: 'permanent'},
+                                        {displayText: 'temporary', text: 'temporary'},
+                                        {displayText: 'see other', text: 'see other'}]),
             from: from, to: to};
   }
 };
@@ -142,8 +175,7 @@ editor.on("keyup", function (cm, event) {
   if (!cm.state.completionActive) {
     // Letter keys only:
     keyPressed = event.key.toLowerCase();
-    // TODO: INCLUDE ':' AND '/'
-    if (keyPressed >= 'a' && keyPressed <= 'z') {
+    if (keyPressed === ':' || keyPressed === '/' || (keyPressed >= 'a' && keyPressed <= 'z')) {
       CodeMirror.commands.autocomplete(cm);
     }
   }
@@ -202,10 +234,20 @@ var validate = function() {
         statusArea.style.color = "#FF0000";
         statusArea.innerHTML = alertText;
         document.getElementById("save-btn").disabled = true;
+        // If the line number is valid, then add it to the message and highlight that line in the
+        // editor while scrolling it into view.
         if (response.line_number >= 0) {
-          editor.markText({line: response.line_number - 1, ch: 0},
-                          {line: response.line_number, ch: 0},
-                          {className: "line-error", clearOnEnter: true});
+          var marker = editor.markText({line: response.line_number - 1, ch: 0},
+                                       {line: response.line_number, ch: 0},
+                                       {className: "line-error", clearOnEnter: true});
+
+          editor.scrollIntoView(what={line: response.line_number, ch: 0}, margin=32);
+
+          // Clear the highlighting after 5000ms:
+          setTimeout(function() {
+            marker.clear();
+          }, 5000);
+
         }
       }
     }
