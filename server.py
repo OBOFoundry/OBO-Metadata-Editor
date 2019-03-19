@@ -5,7 +5,7 @@ import jsonschema
 import os
 import re
 import yaml
-from flask import Flask, jsonify, request, Response
+from flask import Flask, jsonify, request, send_from_directory, Response
 
 
 # To run in development mode, do:
@@ -21,9 +21,19 @@ schema = json.load(open(schemafile))
 
 
 # Use this to troubleshoot parsing errors:
-debug_enabled = True
+debug_enabled = False
 def debug(statement):
   debug_enabled and print(statement)
+
+
+@app.route('/purl-editor', methods=['GET'])
+def purl_editor():
+  return send_from_directory(pwd, 'purl-editor.html', as_attachment=False)
+
+
+@app.route('/<path:path>')
+def send_editor_page(path):
+  return send_from_directory(pwd, path, as_attachment=False)
 
 
 @app.route('/validate', methods=['POST'])
