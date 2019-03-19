@@ -50,7 +50,7 @@ var purlYamlHint = function(editor, options) {
   }
   var currWord = thisLine.slice(currStart, currEnd);
 
-  var currContext = function() {
+  var getContext = function() {
     /* Finds the nearest root-level directive above the current line (if one exists) and returns its
        name. */
     var lineNum = cursor.line;
@@ -92,6 +92,7 @@ var purlYamlHint = function(editor, options) {
   // Send back a completion hint list contextualised to the current position as well as to
   // the letters that have been typed so far.
   var prevString = thisLine.slice(0, currStart);
+  var context = getContext();
   if (prevString === '') {
     return {list: pruneReplacementList([{displayText: 'base_redirect:', text: 'base_redirect: '},
                                         {displayText: 'base_url:', text: 'base_url: '},
@@ -112,47 +113,48 @@ var purlYamlHint = function(editor, options) {
     return {list: pruneReplacementList([{displayText: '/obo/', text: '/obo/'}]),
             from: from, to: to};
   }
-  else if (/^-\s+$/.test(prevString) && currContext() === 'tests') {
+  else if (/^-\s+$/.test(prevString) && context === 'tests') {
     return {list: pruneReplacementList([{displayText: 'from:', text: 'from: \n  to: '},
                                         {displayText: 'to:', text: 'to: '}]),
             from: from, to: to};
   }
-  else if (/^-\s+from:\s+$/.test(prevString) && currContext() === 'tests' && !(/^\//.test(currWord))) {
+  else if (/^\s*-\s+from:\s+$/.test(prevString) && (context === 'tests' || context === 'entries') &&
+           !(/^\//.test(currWord))) {
     return {list: pruneReplacementList([{displayText: '/', text: '/'}]),
             from: from, to: to};
   }
-  else if (/^\s+to:\s+$/.test(prevString) && currContext() === 'tests' &&
+  else if (/^\s+to:\s+$/.test(prevString) && (context === 'tests' || context === 'entries') &&
            !(/^(https?|ftp):\/\//.test(currWord))) {
     return {list: pruneReplacementList([{displayText: 'http://', text: 'http://'},
                                         {displayText: 'https://', text: 'https://'},
                                         {displayText: 'ftp://', text: 'ftp://'},]),
             from: from, to: to};
   }
-  else if (/^-\s+$/.test(prevString) && currContext() === 'entries') {
+  else if (/^-\s+$/.test(prevString) && context === 'entries') {
     return {list: pruneReplacementList([{displayText: 'exact:', text: 'exact: \n  replacement: '},
                                         {displayText: 'prefix:', text: 'prefix: \n  replacement: '},
                                         {displayText: 'regex:', text: 'regex: \n  replacement: '}]),
             from: from, to: to};
   }
-  else if (prevString === '  ' && currContext() === 'entries') {
+  else if (prevString === '  ' && context === 'entries') {
     return {list: pruneReplacementList([{displayText: 'replacement:', text: 'replacement: '},
                                         {displayText: 'status:', text: 'status: '},
                                         {displayText: 'tests:', text: 'tests:\n  - from: \n    to: '}]),
             from: from, to: to};
   }
-  else if (/^-\s+(exact|prefix):\s+$/.test(prevString) && currContext() === 'entries' &&
+  else if (/^-\s+(exact|prefix):\s+$/.test(prevString) && context === 'entries' &&
            !(/^\//.test(currWord))) {
     return {list: pruneReplacementList([{displayText: '/', text: '/'}]),
             from: from, to: to};
   }
-  else if (/^\s+replacement:\s+$/.test(prevString) && currContext() === 'entries' &&
+  else if (/^\s+replacement:\s+$/.test(prevString) && context === 'entries' &&
            !(/^(https?|ftp):\/\//.test(currWord))) {
     return {list: pruneReplacementList([{displayText: 'http://', text: 'http://'},
                                         {displayText: 'https://', text: 'https://'},
                                         {displayText: 'ftp://', text: 'ftp://'},]),
             from: from, to: to};
   }
-  else if (/^\s+status:\s+$/.test(prevString) && currContext() === 'entries' &&
+  else if (/^\s+status:\s+$/.test(prevString) && context === 'entries' &&
            !(/^(permanent|temporary|see other):\/\//.test(currWord))) {
     return {list: pruneReplacementList([{displayText: 'permanent', text: 'permanent'},
                                         {displayText: 'temporary', text: 'temporary'},
@@ -255,7 +257,7 @@ var validate = function() {
       }
     }
   }
-  request.open('POST', 'http://127.0.0.1:5000/validate', true);
+  request.open('POST', '/validate', true);
   request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
   request.send("code=" + encodeURIComponent(code));
 };
@@ -316,7 +318,7 @@ var save = function() {
             }
           }
         }
-        request.open('POST', 'http://127.0.0.1:5000/save', true);
+        request.open('POST', '/save', true);
         request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
         // TODO: agro.yml is hard-coded ...
         request.send("filename=" + 'agro.yml' + '&code=' + encodeURIComponent(code))

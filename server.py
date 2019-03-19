@@ -60,8 +60,8 @@ def validate():
     # Split the long code string into individual lines, and discard everything before `start`:
     codelines = code.splitlines()[start:]
     # Lines containing block labels will always be of this form:
-    pattern = '^(\s*)-?\s*{}\s*:.*$'.format(block_label)
-    # When counting items, we consider only those indented by the same amount as the block label,
+    pattern = '^\s*-?\s*{}\s*:.*$'.format(block_label)
+    # When counting items, we consider only those indented by the same amount,
     # and use indent_level to keep track of the current indentation level:
     indent_level = None
     curr_item = 0
@@ -70,22 +70,22 @@ def validate():
       # Check to see whether the current line contains the block label that we are looking for:
       matched = re.fullmatch(pattern, line)
       if matched:
-        # If it does, then take note of its indentation level and record that we have found it:
-        if indent_level is None:
-          indent_level = len(matched.group(1))
         block_start_found = True
         start = start + i
-        debug("Found the start of the block: '{}' at line {} (indentation level: {})"
-              .format(line, start + 1, indent_level))
+        debug("Found the start of the block: '{}' at line {}".format(line, start + 1))
         # If we have not been instructed to search for an item within the block, then we are done:
         if item < 0:
           return start
       elif block_start_found and item >= 0:
         # If the current line does not contain the block label, then if we have found it previously,
-        # and if we are to search for the nth item within the block, then do that:
+        # and if we are to search for the nth item within the block, then do that. If this is the
+        # first item, then take note of the indentation level.
         matched = re.match('(\s*)-\s*\w+', line)
-        # Only consider items that fall directly under this block:
         item_indent_level = len(matched.group(1)) if matched else None
+        if curr_item == 0:
+          indent_level = item_indent_level
+
+        # Only consider items that fall directly under this block:
         if item_indent_level == indent_level:
           debug("Found item #{} of block: '{}' at line {}. Line is: '{}'"
                 .format(curr_item + 1, block_label, start + i + 1, line))
