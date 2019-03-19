@@ -101,10 +101,11 @@ def validate():
                      'details': format(err)}),
             400)
   except jsonschema.exceptions.ValidationError as err:
+    error_summary = err.schema.get('description') or err.message
     debug("Determining line number for error: {}".format(list(err.absolute_path)))
     start = 0
     if not err.absolute_path:
-      return (jsonify({'summary': format(err.message),
+      return (jsonify({'summary': format(error_summary),
                        'line_number': -1,
                        'details': format(err)}),
               400)
@@ -118,7 +119,7 @@ def validate():
           start = get_error_start(code, start, block_label, component)
           debug("Error begins at line {}".format(start + 1))
 
-    return (jsonify({'summary': format(err.message),
+    return (jsonify({'summary': format(error_summary),
                      'line_number': start + 1,
                      'details': format(err)}),
             400)
