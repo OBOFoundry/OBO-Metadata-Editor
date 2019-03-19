@@ -123,9 +123,9 @@ var purlYamlHint = function(editor, options) {
   }
   else if (/^\s+to:\s+$/.test(prevString) && currContext() === 'tests' &&
            !(/^(https?|ftp):\/\//.test(currWord))) {
-    return {list: pruneReplacementList([{displayText: 'ftp://', text: 'ftp://'},
-                                        {displayText: 'http://', text: 'http://'},
-                                        {displayText: 'https://', text: 'https://'}]),
+    return {list: pruneReplacementList([{displayText: 'http://', text: 'http://'},
+                                        {displayText: 'https://', text: 'https://'},
+                                        {displayText: 'ftp://', text: 'ftp://'},]),
             from: from, to: to};
   }
   else if (/^-\s+$/.test(prevString) && currContext() === 'entries') {
@@ -147,9 +147,9 @@ var purlYamlHint = function(editor, options) {
   }
   else if (/^\s+replacement:\s+$/.test(prevString) && currContext() === 'entries' &&
            !(/^(https?|ftp):\/\//.test(currWord))) {
-    return {list: pruneReplacementList([{displayText: 'ftp://', text: 'ftp://'},
-                                        {displayText: 'http://', text: 'http://'},
-                                        {displayText: 'https://', text: 'https://'}]),
+    return {list: pruneReplacementList([{displayText: 'http://', text: 'http://'},
+                                        {displayText: 'https://', text: 'https://'},
+                                        {displayText: 'ftp://', text: 'ftp://'},]),
             from: from, to: to};
   }
   else if (/^\s+status:\s+$/.test(prevString) && currContext() === 'entries' &&
