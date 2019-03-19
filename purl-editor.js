@@ -182,9 +182,12 @@ editor.on("keyup", function (cm, event) {
 });
 
 
-// Disable the save button when the contents of the editor are changed:
-editor.on("change", function() {
+// Disable the save button when the contents of the editor are changed, and make sure the cursor
+// stays in view. The latter is important because sometimes autocomplete will insert multiple
+// lines into the editor.
+editor.on("changes", function() {
   document.getElementById("save-btn").disabled = true;
+  editor.scrollIntoView(what={line: editor.getCursor().line, ch: 0}, margin=12);
 });
 
 
