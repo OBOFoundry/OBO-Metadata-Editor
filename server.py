@@ -103,7 +103,7 @@ def validate():
 
   try:
     code = request.form['code']
-    yaml_source = yaml.load(code)
+    yaml_source = yaml.load(code, Loader=yaml.SafeLoader)
     jsonschema.validate(yaml_source, schema)
   except (yaml.YAMLError, TypeError) as err:
     return (jsonify({'summary': "YAML parsing error",
