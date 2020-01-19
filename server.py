@@ -5,7 +5,9 @@ import jsonschema
 import os
 import re
 import yaml
-from flask import Flask, jsonify, request, send_from_directory, Response
+
+from authlib.integrations.flask_client import OAuth
+from flask import Flask, jsonify, redirect, request, Response, send_from_directory, session, url_for
 
 
 # To run in development mode, do:
@@ -14,6 +16,22 @@ from flask import Flask, jsonify, request, send_from_directory, Response
 # python3 -m flask run
 
 app = Flask(__name__)
+app.secret_key = os.urandom(16)
+app.config.from_object('config')
+
+# Register the github OAUth App 'purl_editor' which will take care of the integration with github:
+oauth = OAuth(app)
+oauth.register(
+  name=app.config['OAUTH_APP_NAME'],
+  client_id=app.config['GITHUB_CLIENT_ID'],
+  client_secret=app.config['GITHUB_CLIENT_SECRET'],
+  access_token_url=app.config['ACCESS_TOKEN_URL'],
+  access_token_params=app.config['ACCESS_TOKEN_PARAMS'],
+  authorize_url=app.config['AUTHORIZE_URL'],
+  authorize_params=app.config['AUTHORIZE_PARAMS'],
+  api_base_url=app.config['API_BASE_URL'],
+  client_kwargs={'scope': 'user:email'},
+)
 
 pwd = os.path.dirname(os.path.realpath(__file__))
 schemafile = "{}/../purl.obolibrary.org/tools/config.schema.json".format(pwd)
@@ -26,9 +44,14 @@ def debug(statement):
   debug_enabled and print(statement)
 
 
-@app.route('/purl-editor', methods=['GET'])
+@app.route('/', methods=['GET'])
+def root():
+  return redirect('/purl_editor')
+
+
+@app.route('/purl_editor', methods=['GET'])
 def purl_editor():
-  return send_from_directory(pwd, 'purl-editor.html', as_attachment=False)
+  return send_from_directory(pwd, 'purl_editor.html', as_attachment=False)
 
 
 @app.route('/<path:path>')
@@ -60,7 +83,7 @@ def validate():
     # Split the long code string into individual lines, and discard everything before `start`:
     codelines = code.splitlines()[start:]
     # Lines containing block labels will always be of this form:
-    pattern = '^\s*-?\s*{}\s*:.*$'.format(block_label)
+    pattern = r'^\s*-?\s*{}\s*:.*$'.format(block_label)
     # When counting items, we consider only those indented by the same amount,
     # and use indent_level to keep track of the current indentation level:
     indent_level = None
@@ -80,7 +103,7 @@ def validate():
         # If the current line does not contain the block label, then if we have found it previously,
         # and if we are to search for the nth item within the block, then do that. If this is the
         # first item, then take note of the indentation level.
-        matched = re.match('(\s*)-\s*\w+', line)
+        matched = re.match(r'(\s*)-\s*\w+', line)
         item_indent_level = len(matched.group(1)) if matched else None
         if curr_item == 0:
           indent_level = item_indent_level
@@ -137,6 +160,31 @@ def validate():
   return Response(status=200)
 
 
+@app.route('/github_auth_callback_route')
+def github_auth_callback_route():
+  token = oauth.purl_editor.authorize_access_token()
+  if not token:
+    raise Exception("Token could not be authorized")
+  profile = oauth.purl_editor.get('user')
+  if not profile:
+    raise Exception("Profile could not be extracted")
+  profile = profile.json()
+
+  session['identity'] = profile['id']
+  return redirect('/github_pull')
+
+
+def github_authorize():
+  print("Logging in ...")
+  redirect_uri = url_for('github_auth_callback_route', _external=True)
+  return oauth.purl_editor.authorize_redirect(redirect_uri)
+
+
+def github_unauthorize():
+  print("Logging out ...")
+  session.pop('identity', None)
+
+
 @app.route('/save', methods=['POST'])
 def save():
   filename = request.form.get('filename')
@@ -145,3 +193,24 @@ def save():
     return Response("Malformed POST request", status=400)
 
   return Response(status=200)
+
+
+@app.route('/pull')
+def pull():
+  return github_authorize()
+
+
+@app.route('/github_pull')
+def github_pull():
+  # git pull would go here, I guess
+  # gitpull()
+
+  github_unauthorize()
+  return """
+  <!doctype html>
+
+  <title>OBO PURL YAML Code Editor</title>
+  <meta charset="utf-8"/>
+
+  Repository updated! Click <a href="/purl_editor">here</a> to go back to the editor.
+  """
