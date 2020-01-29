@@ -38,6 +38,17 @@ schemafile = "{}/../purl.obolibrary.org/tools/config.schema.json".format(pwd)
 schema = json.load(open(schemafile))
 
 
+# TODO:
+# - at startup, read from a local file in purl.obolibrary.org/ instead of hard-coding the editor
+#   contents.
+#   - for now, don't worry about how to go about selecting a particular file, just work with one
+#     particular one (AGRO, for instance).
+# - when the user saves it should save to the filesystem, locally.
+# - add a button to "refresh" the contents of the editor by doing a git pull. Maybe, whenever a user
+#   opens a file, there should be a dialog asking the user if he wants to "refresh".
+# - add a button to initiate a PR (see details on what needs to be
+#   done in the Knocean todo list for Mike.
+
 # Use this to troubleshoot parsing errors:
 debug_enabled = False
 def debug(statement):

@@ -326,3 +326,25 @@ var save = function() {
     }
   });
 };
+
+// For reading files uploaded by the user:
+var reader = new FileReader();
+
+// When a new file is loaded, fire this function off to refresh the editor with its contents:
+reader.onload = function(event) {
+  var contents = event.target.result;
+  editor.setValue(contents);
+  editor.clearHistory();
+};
+
+// fire this function off when there is an error loading a file:
+reader.onerror = function(event) {
+  console.error("File could not be read! Code " + event.target.error.code);
+}
+
+// When a new file is selected, call the reader to read it. This will trigger reader.onload()
+var control = document.getElementById("selected-file");
+control.addEventListener("change", function(event) {
+  var file = control.files[0];
+  reader.readAsText(file);
+}, false);
