@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import base64
+import functools
 import json
 import jsonschema
 import os
@@ -37,6 +38,8 @@ oauth.register(
   client_kwargs={'scope': 'user:email'},
 )
 
+oauth2_tokens = {}
+
 pwd = os.path.dirname(os.path.realpath(__file__))
 schemafile = "{}/../purl.obolibrary.org/tools/config.schema.json".format(pwd)
 schema = json.load(open(schemafile))
@@ -47,30 +50,61 @@ def debug(statement):
   debug_enabled and print(statement)
 
 
-@app.route('/', methods=['GET'])
-def root():
-  # TODO: Add this block to a decorator that will be applied to every function:
-  # Note that if the user is not authorized, then one result of github_authorize() is that he will
-  # be redirected to the home page. That's ok, but the user should be aware that that has happened.
-  if not session.get('oauth2_token'):
-    return github_authorize()
+def github_authorize(fn):
+    """
+    Wrapper function to verify the session authorization, and authorize if not already authorized.
+    """
+    @functools.wraps(fn)
+    def wrapped(*args, **kwargs):
+      if not session.get('user'):
+        redirect_uri = url_for('github_auth_callback_route', _external=True)
+        return oauth.purl_editor.authorize_redirect(redirect_uri)
+      return fn(*args, **kwargs)
 
+    return wrapped
+
+
+@app.route('/', methods=['GET'])
+@github_authorize
+def root():
+  """
+  Renders the root page of the application
+  """
   return render_template('purl_editor.html', yaml="");
 
 
+@app.route('/logged_in', methods=['GET'])
+@github_authorize
+def logged_in():
+  """
+  Indicates to the user that authentication has just taken place.
+  """
+  return \
+    """
+    <!doctype html>
+
+    <title>OBO PURL YAML Code Editor</title>
+    <meta charset="utf-8"/>
+    <meta http-equiv="refresh" content="3;url=/" />
+
+    <div>
+    <h4>
+    Your session was no longer valid and has been re-authenticated.
+    If you are not redirected in 3 seconds click <a href="/">here</a>.
+    </h4>
+    </div>
+    """
+
 @app.route('/listing', methods=['GET'])
+@github_authorize
 def listing():
-  if not session.get('oauth2_token'):
-    return github_authorize()
-
-  profile = oauth.purl_editor.get('user', token=session['oauth2_token'])
-  if not profile:
-    raise Exception("Profile could not be extracted")
-  profile = profile.json()
-
+  """
+  Asks the github API on behalf of the user for the contents of the config/ directory in the
+  purl.obolibrary.org repository.
+  """
   config_files = oauth.purl_editor.get(
-    'repos/{}/purl.obolibrary.org/contents/config'.format(profile['login']),
-    token=session['oauth2_token'])
+    'repos/{}/purl.obolibrary.org/contents/config'.format(session['user']),
+    token=oauth2_tokens[session['user']])
   if not config_files:
     raise Exception("Could not get contents of the config directory")
 
@@ -78,18 +112,15 @@ def listing():
 
 
 @app.route('/edit/<path:path>', methods=['GET'])
+@github_authorize
 def edit_github(path):
-  if not session.get('oauth2_token'):
-    return github_authorize()
-
-  profile = oauth.purl_editor.get('user', token=session['oauth2_token'])
-  if not profile:
-    raise Exception("Profile could not be extracted")
-  profile = profile.json()
-
+  """
+  Gets the contents of the given path from the purl.obolibrary.org repository and renders it in the
+  editor using a html template file.
+  """
   config_file = oauth.purl_editor.get(
-    'repos/{}/purl.obolibrary.org/contents/{}'.format(profile['login'], path),
-    token=session['oauth2_token'])
+    'repos/{}/purl.obolibrary.org/contents/{}'.format(session['user'], path),
+    token=oauth2_tokens[session['user']])
   if not config_file:
     raise Exception("Could not get the contents of: {}".format(path))
   config_file = config_file.json()
@@ -101,28 +132,34 @@ def edit_github(path):
 
 @app.route('/github_auth_callback_route')
 def github_auth_callback_route():
+  """
+  Callback route for API requests to github
+  """
   token = oauth.purl_editor.authorize_access_token()
   if not token:
     raise Exception("Token could not be authorized")
 
-  session['oauth2_token'] = token
-  return redirect('/')
+  profile = oauth.purl_editor.get('user', token=token)
+  if not profile:
+    raise Exception("Profile could not be extracted")
+
+  profile = profile.json()
+  session['user'] = profile['login']
+  oauth2_tokens[profile['login']] = token
+  return redirect('/logged_in')
 
 
-def github_authorize():
-  print("Logging in ...")
-  redirect_uri = url_for('github_auth_callback_route', _external=True)
-  return oauth.purl_editor.authorize_redirect(redirect_uri)
-
-
-# This is needed to serve static files, for instance in the 3pp/ directory, and also to serve
-# the js file.
 @app.route('/<path:path>')
+@github_authorize
 def send_editor_page(path):
+  """
+  Route for serving up static files, including third party libraries.
+  """
   return send_from_directory(pwd, path, as_attachment=False)
 
 
 @app.route('/validate', methods=['POST'])
+@github_authorize
 def validate():
   """
   Handles a request to validate a block of OBO PURL YAML code. If the code is valid, returns a
@@ -224,7 +261,11 @@ def validate():
 
 
 @app.route('/create_pr', methods=['POST'])
+@github_authorize
 def pr():
+  """
+  Route for initiating a pull request against the github repository.
+  """
   filename = request.form.get('filename')
   code = request.form.get('code')
   if filename is None or code is None:
