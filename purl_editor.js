@@ -1,3 +1,137 @@
+/**
+ * Asks the server for the list of configuration files from github, prompts the user to select
+ * one of them, asks the server to fetch the contents of the selected file from github, and then
+ * asks the server to open the selected contents in the editor.
+ */
+var edit_github = function() {
+  var request = new XMLHttpRequest();
+  request.onreadystatechange = function() {
+    if (request.readyState === 4) {
+      $.unblockUI();
+      $("*").css("cursor", "default");
+      if (request.status && request.status === 200) {
+        var response = JSON.parse(request.responseText);
+        var configFiles = response['config_files'];
+        var inputOptions = [{text: '- Select -', value: ''}];
+
+        configFiles.forEach(function(configFile) {
+          inputOptions.push({
+            text: configFile['name'],
+            value: configFile['path']
+          });
+        });
+
+        bootbox.prompt({
+          title: "Please select a configuration file to edit",
+          closeButton: false,
+          inputType: 'select',
+          inputOptions: inputOptions,
+          callback: function (selectedPath) {
+            if (selectedPath) {
+              // Redirect to the server endpoint that will retrieve the file from github:
+              window.location.href = "/edit/" + selectedPath;
+              $("*").css("cursor", "wait");
+            }
+          }
+        });
+      }
+      else {
+        bootbox.alert({
+          closeButton: false,
+          title: "Problem getting file listing from server",
+          message: request.status + ": " + request.statusText
+        });
+      }
+    }
+  }
+  request.open('GET', '/listing', true);
+  request.send();
+  $("*").css("cursor", "wait");
+  $.blockUI({message: '<div class="fetch-msg">fetching configuration file list ...</div>'});
+};
+
+
+/**
+ * A file reader used when opening local filesystem files.
+ */
+var reader = new FileReader();
+
+
+/**
+ * This function is called when there is an error reading from a local file.
+ */
+reader.onerror = function(event) {
+  bootbox.alert("File could not be read. Code: " + event.target.error.code);
+}
+
+
+/**
+ * This function is called when a new local file is uploaded, and refreshes the CodeMirror
+ * editor with its contents.
+ */
+reader.onload = function(event) {
+  var contents = event.target.result;
+  editor.setValue(contents);
+  editor.clearHistory();
+};
+
+
+/**
+ * This function is called when the user requests to edit a new file. The user is given the option
+ * of either starting with an empty editor, or loading the contents of a local file from her
+ * filesystem into the editor. The latter case is useful for resuming from saved work.
+ */
+var edit_new = function() {
+  bootbox.prompt({
+    title: "Select one of the following options",
+    //message: '<p>Do you want to start with a blank file or load from a local file on your filesystem?</p>',
+    closeButton: false,
+    inputType: 'radio',
+    inputOptions: [
+      {
+        text: 'Begin with an empty editor',
+        value: 'empty',
+      },
+      {
+        text: 'Load the editor with the contents of a local file',
+        value: 'file',
+      }
+    ],
+    callback: function (result) {
+      if (result === 'file') {
+        var uploadHtml = '<input type="file" id="selected-file"></input>';
+        bootbox.dialog({
+          message: uploadHtml,
+          title: "Choose a local file",
+          buttons: {
+            success: {
+              label: "Load",
+              className: "btn-primary",
+              callback: function () {
+                var control = document.getElementById("selected-file");
+                var file = control.files[0];
+                reader.readAsText(file);
+                // Change the address displayed in the address bar (without reloading):
+                history.replaceState(null, '', '/');
+              }
+            }
+          }
+        });
+      }
+      else if (result === 'empty') {
+        editor.setValue("");
+        editor.clearHistory();
+        // Change the address displayed in the address bar (withoug reloading):
+        history.replaceState(null, '', '/');
+      }
+    }
+  });
+};
+
+
+/**
+ * Initialize the editor instance:
+ */
 var editor = CodeMirror.fromTextArea(document.getElementById("code"), {
   /* Instantiates a CodeMirror editor object from the HTML text area called "code" */
   mode: "text/x-yaml",
@@ -33,8 +167,10 @@ var editor = CodeMirror.fromTextArea(document.getElementById("code"), {
 });
 
 
+/**
+ * Generates completion hints depending on the current cursor position of the yaml file
+ */
 var purlYamlHint = function(editor, options) {
-  /* Generates completion hints depending on the current cursor position of the yaml file */
   var cursor = editor.getCursor();
   var thisLine = editor.getLine(cursor.line);
   var currEnd = cursor.ch;
@@ -164,13 +300,17 @@ var purlYamlHint = function(editor, options) {
 };
 
 
-// Add our custom hinting function to the editor:
+/**
+ * Add our custom hinting function to the editor
+ */
 CodeMirror.commands.autocomplete = function(cm) {
   cm.showHint({hint: purlYamlHint, completeSingle: false});
 }
 
 
-// Activate hint popup on any letter key press
+/**
+ * Activate hint popup on any letter key press
+ */
 editor.on("keyup", function (cm, event) {
   // If the autocompletion popup is not already active, and if the user has typed a letter,
   // then activate the autocompletion popup:
@@ -184,21 +324,30 @@ editor.on("keyup", function (cm, event) {
 });
 
 
-// Disable the save button when the contents of the editor are changed, and make sure the cursor
-// stays in view. The latter is important because sometimes autocomplete will insert multiple
-// lines into the editor.
+/**
+ * Disable the pr button when the contents of the editor are changed, and make sure the cursor
+ * stays in view. The latter is important because sometimes autocomplete will insert multiple
+ * lines into the editor.
+ */
 editor.on("changes", function() {
-  document.getElementById("save-btn").disabled = true;
+  document.getElementById("pr-btn").disabled = true;
   editor.scrollIntoView(what={line: editor.getCursor().line, ch: 0}, margin=12);
 });
 
 
-// Disable the editor if the user refreshes or otherwise leaves the page:
+/**
+ * Disable the editor if the user refreshes or otherwise leaves the page
+ */
 window.onbeforeunload = function() {
-  document.getElementById("save-btn").disabled = true;
+  if (document.getElementById("pr-btn")) {
+    document.getElementById("pr-btn").disabled = true;
+  }
 }
 
 
+/**
+ * Validates the contents of the editor, displaying the validation result in the status area.
+ */
 var validate = function() {
   // Save the contents of the editor to its associated text area:
   editor.save();
@@ -212,19 +361,19 @@ var validate = function() {
   statusArea.innerHTML = "Validating ...";
 
   // Embed the code into a POST request and send it to the server for processing.
-  // If the validation is successful, enable the Save button, otherwise disable it.
+  // If the validation is successful, enable the Pr button, otherwise disable it.
   var request = new XMLHttpRequest();
   request.onreadystatechange = function() {
     if (request.readyState === 4) {
       if (!request.status) {
         statusArea.style.color = "#FF0000";
         statusArea.innerHTML = "Problem communicating with server";
-        document.getElementById("save-btn").disabled = true;
+        document.getElementById("pr-btn").disabled = true;
       }
       else if (request.status === 200) {
         statusArea.style.color = "#00CD00";
         statusArea.innerHTML = "Validation successful";
-        document.getElementById("save-btn").disabled = false;
+        document.getElementById("pr-btn").disabled = false;
       }
       else {
         // Display the error message in the status area. Note that we must replace any angle
@@ -238,7 +387,7 @@ var validate = function() {
         alertText = '<div class="preformatted">' + alertText + '</div>';
         statusArea.style.color = "#FF0000";
         statusArea.innerHTML = alertText;
-        document.getElementById("save-btn").disabled = true;
+        document.getElementById("pr-btn").disabled = true;
         // If the line number is valid, then add it to the message and highlight that line in the
         // editor while scrolling it into view.
         if (response.line_number >= 0) {
@@ -263,18 +412,21 @@ var validate = function() {
 };
 
 
-var save = function() {
+/**
+ * Pr the contents of the editor
+ */
+var create_pr = function() {
   // Get a confirmation from the user:
   bootbox.confirm({ 
     size: "large",
     closeButton: false,
-    title: "Confirm save",
-    message: 'By saving now <b>you will initiate a pull request</b> in the purl.obolibrary.org ' +
+    title: "Confirm creation of pull request",
+    message: 'By continuing <b>you will initiate a pull request</b> in the purl.obolibrary.org ' +
       'repository containing the changes you have made to this file. Please confirm that you ' +
       'really want to do this.',
     buttons: {
       confirm: {
-        label: 'Save',
+        label: 'Create a pull request',
         className: 'btn-danger'
       },
       cancel: {
@@ -284,8 +436,8 @@ var save = function() {
     },
     callback: function(result) {
       if (result) {
-        // Disable the save button:
-        document.getElementById("save-btn").disabled = true;
+        // Disable the pr button:
+        document.getElementById("pr-btn").disabled = true;
 
         // Extract the code from the text area:
         var code = document.getElementById("code").value;
@@ -293,7 +445,7 @@ var save = function() {
         // Clear the status area:
         var statusArea = document.getElementById("status-area");
         statusArea.style.color = "#000000";
-        statusArea.innerHTML = "Saving ...";
+        statusArea.innerHTML = "Creating PR ...";
 
         // Embed the code into a POST request and send it to the server for processing.
         var request = new XMLHttpRequest();
@@ -305,12 +457,12 @@ var save = function() {
             }
             else if (request.status === 200) {
               statusArea.style.color = "#00CD00";
-              statusArea.innerHTML = "Save successful";
+              statusArea.innerHTML = "PR creation successful";
             }
             else {
               // Display the error message in the status area. Note that we must replace any angle
               // angle brackets with HTML escape codes.
-              alertText = "Save failed.\n\n" +
+              alertText = "Pr creation failed.\n\n" +
                 request.responseText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
               alertText = '<div class="preformatted">' + alertText + '</div>';
               statusArea.style.color = "#FF0000";
@@ -318,7 +470,7 @@ var save = function() {
             }
           }
         }
-        request.open('POST', '/save', true);
+        request.open('POST', '/create_pr', true);
         request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
         // TODO: agro.yml is hard-coded ...
         request.send("filename=" + 'agro.yml' + '&code=' + encodeURIComponent(code))
@@ -326,25 +478,3 @@ var save = function() {
     }
   });
 };
-
-// For reading files uploaded by the user:
-var reader = new FileReader();
-
-// When a new file is loaded, fire this function off to refresh the editor with its contents:
-reader.onload = function(event) {
-  var contents = event.target.result;
-  editor.setValue(contents);
-  editor.clearHistory();
-};
-
-// fire this function off when there is an error loading a file:
-reader.onerror = function(event) {
-  console.error("File could not be read! Code " + event.target.error.code);
-}
-
-// When a new file is selected, call the reader to read it. This will trigger reader.onload()
-var control = document.getElementById("selected-file");
-control.addEventListener("change", function(event) {
-  var file = control.files[0];
-  reader.readAsText(file);
-}, false);

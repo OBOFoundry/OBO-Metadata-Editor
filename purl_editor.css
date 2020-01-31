@@ -1,3 +1,11 @@
+.hidden {
+    display: none;
+}
+
+.fetch-msg {
+    font-weight: bold;
+}
+
 .CodeMirror {
     background-color: #FFFFF0;
     border: 3px solid;
