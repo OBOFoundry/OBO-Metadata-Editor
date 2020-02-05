@@ -1,0 +1,75 @@
+<!doctype html>
+<meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+<meta content="utf-8" http-equiv="encoding">
+
+<title>OBO PURL YAML Code Editor</title>
+
+<!-- TODO: Get rid of any includes that we don't need. -->
+
+<!-- JQuery and JQuery UI CDNs -->
+<script src="https://code.jquery.com/jquery-3.3.1.js"
+	      integrity="sha256-2Kok7MbOyxpgUVvAk/HJ2jigOSYS2auK4Pfzbm7uH60="
+	      crossorigin="anonymous">
+</script>
+<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"
+			  integrity="sha256-T0Vest3yCU7pafRw9r+settMBX6JkKN06dqBnpQ8d30="
+			  crossorigin="anonymous">
+</script>
+
+<!-- Bootstrap and bootbox dependencies -->
+<link href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
+      rel="stylesheet" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh"
+      crossorigin="anonymous">
+</link>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.bundle.min.js"
+        integrity="sha384-6khuMg9gaYr5AxOqhkVIODVIvm9ynTT5J4V1cfthmT+emCG6yVmEZsRHdxlotUnm"
+        crossorigin="anonymous">
+</script>
+
+<!-- CodeMirror dependencies -->
+<link rel="stylesheet" href="/3pp/codemirror/lib/codemirror.css"/>
+<link rel="stylesheet" href="/3pp/codemirror/addon/display/fullscreen.css"/>
+<link rel="stylesheet" href="/3pp/codemirror/addon/hint/show-hint.css">
+<script src="/3pp/codemirror/lib/codemirror.js"></script>
+<script src="/3pp/codemirror/addon/dialog/dialog.js"></script>
+<script src="/3pp/codemirror/addon/search/searchcursor.js"></script>
+<script src="/3pp/codemirror/addon/edit/matchbrackets.js"></script>
+<script src="/3pp/codemirror/addon/display/fullscreen.js"></script>
+<script src="/3pp/codemirror/mode/yaml/yaml.js"></script>
+<script src="/3pp/codemirror/addon/hint/show-hint.js"></script>
+
+<script src="/purl_editor.js" defer></script>
+<link rel="stylesheet" href="/purl_editor.css"/>
+
+<div class="container-fluid">
+
+  <h2>OBO PURL YAML Code Editor
+    {% if idspace is defined %}
+      for {{ idspace | replace(".yml", "") | upper }}
+    {% endif %}</h2>
+  <div>
+    <ul>
+      <li>Press <samp>F11</samp> inside the editor to maximize editor space (<samp>Esc</samp> to revert).</li>
+      <li>Press <samp>Ctrl-space</samp> for autocompletion.</li>
+    </ul>
+  </div>
+
+  <!-- Here is where the CodeMirror editor will live. This element is hidden but it will be used all
+       the same to generate the CodeMirror editor.  -->
+
+  <textarea id="code" class="hidden">{% if yaml is defined %}{{ yaml }}{% endif %}</textarea>
+
+  <div>
+    <a class="btn btn-primary" href="/" role="button">Back to main menu</a>
+    <button id="validate-btn" class="btn btn-primary" onclick="validate()">Validate</button>
+    {% if idspace is defined %}
+      <button id="pr-btn" class="btn btn-danger" onclick="update_config()" disabled>Submit update</button>
+    {% else %}
+      <button id="pr-btn" class="btn btn-danger" onclick="add_config()" disabled>Add file</button>
+    {% endif %}
+  </div>
+
+  <!-- Messages received when pressing the 'Validate' button are displayed in this div. -->
+  <div id="status-area"/>
+
+</div>

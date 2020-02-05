@@ -64,15 +64,6 @@ def github_authorize(fn):
     return wrapped
 
 
-@app.route('/', methods=['GET'])
-@github_authorize
-def root():
-  """
-  Renders the root page of the application
-  """
-  return render_template('purl_editor.html', yaml="");
-
-
 @app.route('/logged_in', methods=['GET'])
 @github_authorize
 def logged_in():
@@ -95,20 +86,46 @@ def logged_in():
     </div>
     """
 
-@app.route('/listing', methods=['GET'])
+
+@app.route('/github_auth_callback_route')
+def github_auth_callback_route():
+  """
+  Callback route for API requests to github
+  """
+  token = oauth.purl_editor.authorize_access_token()
+  if not token:
+    raise Exception("Token could not be authorized")
+
+  profile = oauth.purl_editor.get('user', token=token)
+  if not profile:
+    raise Exception("Profile could not be extracted")
+
+  # MAYBE WE SHOULD USE HTML5 WEB STORAGE INSTEAD OF A COOKIE.
+  # (see https://security.stackexchange.com/questions/80727/best-place-to-store-authentication-tokens-client-side)
+  profile = profile.json()
+  session['user'] = profile['login']
+  oauth2_tokens[profile['login']] = token
+  return redirect('/logged_in')
+
+
+@app.route('/', methods=['GET'])
 @github_authorize
-def listing():
+def root():
   """
-  Asks the github API on behalf of the user for the contents of the config/ directory in the
-  purl.obolibrary.org repository.
+  Renders the root page of the application
   """
-  config_files = oauth.purl_editor.get(
+  configs = oauth.purl_editor.get(
     'repos/{}/purl.obolibrary.org/contents/config'.format(session['user']),
     token=oauth2_tokens[session['user']])
-  if not config_files:
+  if not configs:
     raise Exception("Could not get contents of the config directory")
 
-  return jsonify({'config_files': config_files.json()})
+  return render_template('index.jinja2', configs=configs.json())
+
+@app.route('/edit_new', methods=['GET'])
+@github_authorize
+def edit_new():
+  return render_template('purl_editor.jinja2')
 
 
 @app.route('/edit/<path:path>', methods=['GET'])
@@ -127,26 +144,7 @@ def edit_github(path):
 
   decodedBytes = base64.b64decode(config_file['content'])
   decodedStr = str(decodedBytes, "utf-8")
-  return render_template('purl_editor.html', yaml=decodedStr)
-
-
-@app.route('/github_auth_callback_route')
-def github_auth_callback_route():
-  """
-  Callback route for API requests to github
-  """
-  token = oauth.purl_editor.authorize_access_token()
-  if not token:
-    raise Exception("Token could not be authorized")
-
-  profile = oauth.purl_editor.get('user', token=token)
-  if not profile:
-    raise Exception("Profile could not be extracted")
-
-  profile = profile.json()
-  session['user'] = profile['login']
-  oauth2_tokens[profile['login']] = token
-  return redirect('/logged_in')
+  return render_template('purl_editor.jinja2', yaml=decodedStr, idspace=config_file['name'])
 
 
 @app.route('/<path:path>')
