@@ -45,7 +45,7 @@
 
     <div class="dropdown-menu" aria-labelledby="dropdownMenuLink">
       {% for cfg in configs %}
-        <a class="dropdown-item" href="/edit/{{ cfg.path }}">{{ cfg.name }}</a>
+        <a class="dropdown-item" href="/edit/{{ cfg.path }}">{{ cfg.name | replace(".yml", "") | upper }}</a>
       {% endfor %}
     </div>
   </div>
