@@ -5,13 +5,14 @@ import functools
 import json
 import jsonschema
 import os
-import re
 import yaml
 
-from authlib.integrations.flask_client import OAuth
-from flask import Flask, jsonify, redirect, render_template, request, Response, \
-  send_from_directory, session, url_for
-
+from flask import Flask, jsonify, render_template, request, Response, g, send_from_directory, \
+  session, redirect, url_for
+from flask_github import GitHub
+from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy.orm import scoped_session, sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
 
 # To run in development mode, do:
 # export FLASK_APP=server.py
@@ -23,139 +24,132 @@ from flask import Flask, jsonify, redirect, render_template, request, Response, 
 # GITHUB_CLIENT_SECRET
 # FLASK_SECRET_KEY
 
-app = Flask(__name__)
-app.config.from_object('config')
-app.secret_key = app.config['FLASK_SECRET_KEY']
-
-# Register the github OAUth App 'purl_editor' which will take care of the integration with github:
-oauth = OAuth(app)
-oauth.register(
-  name=app.config['OAUTH_APP_NAME'],
-  client_id=app.config['GITHUB_CLIENT_ID'],
-  client_secret=app.config['GITHUB_CLIENT_SECRET'],
-  access_token_url=app.config['ACCESS_TOKEN_URL'],
-  access_token_params=app.config['ACCESS_TOKEN_PARAMS'],
-  authorize_url=app.config['AUTHORIZE_URL'],
-  authorize_params=app.config['AUTHORIZE_PARAMS'],
-  api_base_url=app.config['API_BASE_URL'],
-  client_kwargs={'scope': 'user:email'},
-)
-
 pwd = os.path.dirname(os.path.realpath(__file__))
 schemafile = "{}/../purl.obolibrary.org/tools/config.schema.json".format(pwd)
 schema = json.load(open(schemafile))
 
+# Setup the webapp:
+app = Flask(__name__)
+app.config.from_object('config')
+app.secret_key = app.config['FLASK_SECRET_KEY']
 
-def github_authorize(fn):
-    """
-    Wrapper function to verify the session authorization, and authorize if not already authorized.
-    """
-    @functools.wraps(fn)
-    def wrapped(*args, **kwargs):
-      if not session.get('user'):
-        redirect_uri = url_for('github_callback', _external=True)
-        return oauth.purl_editor.authorize_redirect(redirect_uri)
-      return fn(*args, **kwargs)
+# setup github-flask
+github = GitHub(app)
 
-    return wrapped
+# setup sqlalchemy for to run the users database
+engine = create_engine(app.config['DATABASE_URI'])
+db_session = scoped_session(sessionmaker(autocommit=False,
+                                         autoflush=False,
+                                         bind=engine))
+Base = declarative_base()
+Base.query = db_session.query_property()
+Base.metadata.create_all(bind=engine)
 
 
-@app.route('/logged_in', methods=['GET'])
-@github_authorize
-def logged_in():
-  """
-  Indicates to the user that authentication has just taken place.
-  """
-  return \
-    """
-    <!doctype html>
+# The users database table which holds information for users that have been authenticated
+class User(Base):
+  __tablename__ = 'users'
 
-    <title>OBO PURL YAML Code Editor</title>
-    <meta charset="utf-8"/>
-    <meta http-equiv="refresh" content="3;url=/" />
+  id = Column(Integer, primary_key=True)
+  github_access_token = Column(String(255))
+  github_id = Column(Integer)
+  github_login = Column(String(255))
 
-    <div>
-    <h4>
-    Your session was no longer valid and has been re-authenticated.
-    If you are not redirected in 3 seconds click <a href="/">here</a>.
-    </h4>
-    </div>
-    """
+  def __init__(self, github_access_token):
+    self.github_access_token = github_access_token
+
+
+@app.before_request
+def before_request():
+  g.user = None
+  if 'user_id' in session:
+    g.user = User.query.get(session['user_id'])
+
+
+@app.after_request
+def after_request(response):
+  db_session.remove()
+  return response
+
+
+@github.access_token_getter
+def token_getter():
+  user = g.user
+  if user is not None:
+    return user.github_access_token
 
 
 @app.route('/github_callback')
-def github_callback():
-  """
-  Callback route for API requests to github
-  """
-  token = oauth.purl_editor.authorize_access_token()
-  if not token:
-    raise Exception("Token could not be authorized")
+@github.authorized_handler
+def authorized(access_token):
+  next_url = request.args.get('next') or url_for('index')
+  if access_token is None:
+    return redirect(next_url)
 
-  profile = oauth.purl_editor.get('user', token=token)
-  if not profile:
-    raise Exception("Profile could not be extracted")
+  user = User.query.filter_by(github_access_token=access_token).first()
+  if user is None:
+    user = User(access_token)
+    db_session.add(user)
 
-  profile = profile.json()
-  session['user'] = {'login': profile['login'], 'token': token}
-  return redirect('/logged_in')
+  user.github_access_token = access_token
+
+  g.user = user
+  github_user = github.get('/user')
+  user.github_id = github_user['id']
+  user.github_login = github_user['login']
+
+  db_session.commit()
+
+  session['user_id'] = user.id
+  return redirect(next_url)
+
+
+@app.route('/login')
+def login():
+  if session.get('user_id', None) is None:
+    return github.authorize()
+  else:
+    return 'Already logged in'
+
 
 @app.route('/logout')
 def logout():
-  """
-  INSERT DOC HERE
-  """
-  session.pop('user')
-  return 'Click <a href="/">here</a> to return to the OBO PURL YAML Code Editor'
+  session.pop('user_id', None)
+  return redirect(url_for('index'))
 
 
-@app.route('/', methods=['GET'])
-@github_authorize
-def root():
+def verify_logged_in(fn):
   """
-  Renders the root page of the application
+  Decorator used to make sure that the user is logged in
   """
-  configs = oauth.purl_editor.get(
-    'repos/{}/purl.obolibrary.org/contents/config'.format(session['user']['login']),
-    token=session['user']['token'])
+  @functools.wraps(fn)
+  def wrapped(*args, **kwargs):
+    if not g.user:
+      return redirect(url_for("logged_out"))
+    return fn(*args, **kwargs)
+  return wrapped
+
+
+@app.route('/logged_out')
+def logged_out():
+  return 'Click here to <a href="{}">login</a>.'.format(url_for('login'))
+
+
+@app.route('/')
+@verify_logged_in
+def index():
+  """
+  Renders the index page of the application
+  """
+  configs = github.get('repos/{}/purl.obolibrary.org/contents/config'.format(g.user.github_login))
   if not configs:
     raise Exception("Could not get contents of the config directory")
 
-  return render_template('index.jinja2',
-                         configs=configs.json(),
-                         login=session['user']['login'] if session.get('user') else None)
-
-
-@app.route('/edit_new', methods=['GET'])
-@github_authorize
-def edit_new():
-  return render_template('purl_editor.jinja2')
-
-
-@app.route('/edit/<path:path>', methods=['GET'])
-@github_authorize
-def edit_github(path):
-  """
-  Gets the contents of the given path from the purl.obolibrary.org repository and renders it in the
-  editor using a html template file.
-  """
-  config_file = oauth.purl_editor.get(
-    'repos/{}/purl.obolibrary.org/contents/{}'.format(session['user']['login'], path),
-    token=session['user']['token'])
-  if not config_file:
-    raise Exception("Could not get the contents of: {}".format(path))
-  config_file = config_file.json()
-
-  decodedBytes = base64.b64decode(config_file['content'])
-  decodedStr = str(decodedBytes, "utf-8")
-  return render_template('purl_editor.jinja2',
-                         yaml=decodedStr,
-                         idspace=config_file['name'],
-                         login=session['user']['login'] if session.get('user') else None)
+  return render_template('index.jinja2', configs=configs, login=g.user.github_login)
 
 
 @app.route('/<path:path>')
-@github_authorize
+@verify_logged_in
 def send_editor_page(path):
   """
   Route for serving up static files, including third party libraries.
@@ -163,8 +157,34 @@ def send_editor_page(path):
   return send_from_directory(pwd, path, as_attachment=False)
 
 
+@app.route('/edit_new')
+@verify_logged_in
+def edit_new():
+  return render_template('purl_editor.jinja2')
+
+
+@app.route('/edit/<path:path>')
+@verify_logged_in
+def edit_config(path):
+  """
+  Gets the contents of the given path from the purl.obolibrary.org repository and renders it in the
+  editor using a html template file.
+  """
+  config_file = github.get(
+    'repos/{}/purl.obolibrary.org/contents/{}'.format(g.user.github_login, path))
+  if not config_file:
+    raise Exception("Could not get the contents of: {}".format(path))
+
+  decodedBytes = base64.b64decode(config_file['content'])
+  decodedStr = str(decodedBytes, "utf-8")
+  return render_template('purl_editor.jinja2',
+                         yaml=decodedStr,
+                         idspace=config_file['name'],
+                         login=g.user.github_login)
+
+
 @app.route('/validate', methods=['POST'])
-@github_authorize
+@verify_logged_in
 def validate():
   """
   Handles a request to validate a block of OBO PURL YAML code. If the code is valid, returns a
@@ -270,7 +290,7 @@ def validate():
 
 # PROBABLY WE WON'T NEED THIS?
 @app.route('/create_pr', methods=['POST'])
-@github_authorize
+@verify_logged_in
 def pr():
   """
   Route for initiating a pull request against the github repository.
