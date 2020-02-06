@@ -83,7 +83,12 @@ def token_getter():
 @github.authorized_handler
 def authorized(access_token):
   next_url = request.args.get('next') or url_for('index')
+
   if access_token is None:
+    return redirect(next_url)
+
+  # If this check fails then there may have been an attempted CSRF attack:
+  if request.args.get('state') != app.config['GITHUB_OAUTH_STATE']:
     return redirect(next_url)
 
   user = User.query.filter_by(github_access_token=access_token).first()
@@ -107,7 +112,7 @@ def authorized(access_token):
 @app.route('/login')
 def login():
   if session.get('user_id', None) is None:
-    return github.authorize()
+    return github.authorize(scope='repo', state=app.config.get('GITHUB_OAUTH_STATE'))
   else:
     return 'Already logged in'
 
