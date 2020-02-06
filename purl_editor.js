@@ -1,40 +1,86 @@
 /**
- * Initialize the editor instance:
+ * Initialize the editor instance if the element with the id "code" exists:
  */
-var editor = CodeMirror.fromTextArea(document.getElementById("code"), {
-  /* Instantiates a CodeMirror editor object from the HTML text area called "code" */
-  mode: "text/x-yaml",
-  theme: "default",
-  lineNumbers: true,
-  matchBrackets: true,
-  showCursorWhenSelecting: true,
-  extraKeys: {
-    "F11": function(cm) {
-      // If F11 is pressed and we are not already in fullscreen mode, pop up a dialog informing the
-      // user how to get out of it:
-      if (!cm.getOption("fullScreen")) {
-        bootbox.alert({
-          title: 'Entering fullscreen editor mode',
-          message: 'To leave fullscreen mode, press F11 or Esc',
-          closeButton: false,
-        });
-      }
-      // Toggle fullscreen mode:
-      cm.setOption("fullScreen", !cm.getOption("fullScreen"));
-    },
-    "Esc": function(cm) {
-      // Pressing escape leaves fullscreen mode if we are currently in it:
-      if (cm.getOption("fullScreen"))
-        cm.setOption("fullScreen", false);
-    },
-    Tab: function(cm) {
-      // Pressing the tab key actually produces spaces, not tabs:
-      var spaces = Array(cm.getOption("indentUnit") + 1).join(" ");
-      cm.replaceSelection(spaces);
-    },
-  }
-});
+var editor;
+if (document.getElementById("code")) {
+  editor = CodeMirror.fromTextArea(document.getElementById("code"), {
+    /* Instantiates a CodeMirror editor object from the HTML text area called "code" */
+    mode: "text/x-yaml",
+    theme: "default",
+    lineNumbers: true,
+    matchBrackets: true,
+    showCursorWhenSelecting: true,
+    extraKeys: {
+      "F11": function(cm) {
+        // If F11 is pressed and we are not already in fullscreen mode, pop up a dialog informing the
+        // user how to get out of it:
+        if (!cm.getOption("fullScreen")) {
+          bootbox.alert({
+            title: 'Entering fullscreen editor mode',
+            message: 'To leave fullscreen mode, press F11 or Esc',
+            closeButton: false,
+          });
+        }
+        // Toggle fullscreen mode:
+        cm.setOption("fullScreen", !cm.getOption("fullScreen"));
+      },
+      "Esc": function(cm) {
+        // Pressing escape leaves fullscreen mode if we are currently in it:
+        if (cm.getOption("fullScreen"))
+          cm.setOption("fullScreen", false);
+      },
+      Tab: function(cm) {
+        // Pressing the tab key actually produces spaces, not tabs:
+        var spaces = Array(cm.getOption("indentUnit") + 1).join(" ");
+        cm.replaceSelection(spaces);
+      },
+    }
+  });
 
+  /**
+   * Add our custom hinting function to the editor
+   */
+  CodeMirror.commands.autocomplete = function(cm) {
+    cm.showHint({hint: purlYamlHint, completeSingle: false});
+  }
+
+
+  /**
+   * Activate hint popup on any letter key press
+   */
+  editor.on("keyup", function (cm, event) {
+    // If the autocompletion popup is not already active, and if the user has typed a letter,
+    // then activate the autocompletion popup:
+    if (!cm.state.completionActive) {
+      // Letter keys only:
+      keyPressed = event.key.toLowerCase();
+      if (keyPressed === ':' || keyPressed === '/' || (keyPressed >= 'a' && keyPressed <= 'z')) {
+        CodeMirror.commands.autocomplete(cm);
+      }
+    }
+  });
+
+
+  /**
+   * Disable the pr button when the contents of the editor are changed, and make sure the cursor
+   * stays in view. The latter is important because sometimes autocomplete will insert multiple
+   * lines into the editor.
+   */
+  editor.on("changes", function() {
+    document.getElementById("pr-btn").disabled = true;
+    editor.scrollIntoView(what={line: editor.getCursor().line, ch: 0}, margin=12);
+  });
+
+
+  /**
+   * Disable the editor if the user refreshes or otherwise leaves the page
+   */
+  window.onbeforeunload = function() {
+    if (document.getElementById("pr-btn")) {
+      document.getElementById("pr-btn").disabled = true;
+    }
+  }
+}
 
 /**
  * Generates completion hints depending on the current cursor position of the yaml file
@@ -167,52 +213,6 @@ var purlYamlHint = function(editor, options) {
             from: from, to: to};
   }
 };
-
-
-/**
- * Add our custom hinting function to the editor
- */
-CodeMirror.commands.autocomplete = function(cm) {
-  cm.showHint({hint: purlYamlHint, completeSingle: false});
-}
-
-
-/**
- * Activate hint popup on any letter key press
- */
-editor.on("keyup", function (cm, event) {
-  // If the autocompletion popup is not already active, and if the user has typed a letter,
-  // then activate the autocompletion popup:
-  if (!cm.state.completionActive) {
-    // Letter keys only:
-    keyPressed = event.key.toLowerCase();
-    if (keyPressed === ':' || keyPressed === '/' || (keyPressed >= 'a' && keyPressed <= 'z')) {
-      CodeMirror.commands.autocomplete(cm);
-    }
-  }
-});
-
-
-/**
- * Disable the pr button when the contents of the editor are changed, and make sure the cursor
- * stays in view. The latter is important because sometimes autocomplete will insert multiple
- * lines into the editor.
- */
-editor.on("changes", function() {
-  document.getElementById("pr-btn").disabled = true;
-  editor.scrollIntoView(what={line: editor.getCursor().line, ch: 0}, margin=12);
-});
-
-
-/**
- * Disable the editor if the user refreshes or otherwise leaves the page
- */
-window.onbeforeunload = function() {
-  if (document.getElementById("pr-btn")) {
-    document.getElementById("pr-btn").disabled = true;
-  }
-}
-
 
 /**
  * Validates the contents of the editor, displaying the validation result in the status area.

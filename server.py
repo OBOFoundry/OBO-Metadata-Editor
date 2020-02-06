@@ -114,7 +114,7 @@ def login():
   if session.get('user_id', None) is None:
     return github.authorize(scope='repo', state=app.config.get('GITHUB_OAUTH_STATE'))
   else:
-    return 'Already logged in'
+    return redirect(url_for("index"))
 
 
 @app.route('/logout')
@@ -137,7 +137,7 @@ def verify_logged_in(fn):
 
 @app.route('/logged_out')
 def logged_out():
-  return 'Click here to <a href="{}">login</a>.'.format(url_for('login'))
+  return render_template('logged_out.jinja2')
 
 
 @app.route('/')
