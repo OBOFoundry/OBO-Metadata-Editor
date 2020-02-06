@@ -14,15 +14,18 @@ from flask import Flask, jsonify, redirect, render_template, request, Response, 
 
 
 # To run in development mode, do:
-# export GITHUB_CLIENT_ID=<client id for this application>
-# export GITHUB_CLIENT_SECRET<client secret for this application>
 # export FLASK_APP=server.py
 # export FLASK_DEBUG=1 (optional)
 # python3 -m flask run
+#
+# Note that the following environment variables must be set:
+# GITHUB_CLIENT_ID
+# GITHUB_CLIENT_SECRET
+# FLASK_SECRET_KEY
 
 app = Flask(__name__)
-app.secret_key = os.urandom(16)
 app.config.from_object('config')
+app.secret_key = app.config['FLASK_SECRET_KEY']
 
 # Register the github OAUth App 'purl_editor' which will take care of the integration with github:
 oauth = OAuth(app)
@@ -38,16 +41,9 @@ oauth.register(
   client_kwargs={'scope': 'user:email'},
 )
 
-oauth2_tokens = {}
-
 pwd = os.path.dirname(os.path.realpath(__file__))
 schemafile = "{}/../purl.obolibrary.org/tools/config.schema.json".format(pwd)
 schema = json.load(open(schemafile))
-
-# Use this to troubleshoot parsing errors:
-debug_enabled = False
-def debug(statement):
-  debug_enabled and print(statement)
 
 
 def github_authorize(fn):
@@ -57,7 +53,7 @@ def github_authorize(fn):
     @functools.wraps(fn)
     def wrapped(*args, **kwargs):
       if not session.get('user'):
-        redirect_uri = url_for('github_auth_callback_route', _external=True)
+        redirect_uri = url_for('github_callback', _external=True)
         return oauth.purl_editor.authorize_redirect(redirect_uri)
       return fn(*args, **kwargs)
 
@@ -87,8 +83,8 @@ def logged_in():
     """
 
 
-@app.route('/github_auth_callback_route')
-def github_auth_callback_route():
+@app.route('/github_callback')
+def github_callback():
   """
   Callback route for API requests to github
   """
@@ -100,12 +96,17 @@ def github_auth_callback_route():
   if not profile:
     raise Exception("Profile could not be extracted")
 
-  # MAYBE WE SHOULD USE HTML5 WEB STORAGE INSTEAD OF A COOKIE.
-  # (see https://security.stackexchange.com/questions/80727/best-place-to-store-authentication-tokens-client-side)
   profile = profile.json()
-  session['user'] = profile['login']
-  oauth2_tokens[profile['login']] = token
+  session['user'] = {'login': profile['login'], 'token': token}
   return redirect('/logged_in')
+
+@app.route('/logout')
+def logout():
+  """
+  INSERT DOC HERE
+  """
+  session.pop('user')
+  return 'Click <a href="/">here</a> to return to the OBO PURL YAML Code Editor'
 
 
 @app.route('/', methods=['GET'])
@@ -115,12 +116,15 @@ def root():
   Renders the root page of the application
   """
   configs = oauth.purl_editor.get(
-    'repos/{}/purl.obolibrary.org/contents/config'.format(session['user']),
-    token=oauth2_tokens[session['user']])
+    'repos/{}/purl.obolibrary.org/contents/config'.format(session['user']['login']),
+    token=session['user']['token'])
   if not configs:
     raise Exception("Could not get contents of the config directory")
 
-  return render_template('index.jinja2', configs=configs.json())
+  return render_template('index.jinja2',
+                         configs=configs.json(),
+                         login=session['user']['login'] if session.get('user') else None)
+
 
 @app.route('/edit_new', methods=['GET'])
 @github_authorize
@@ -136,15 +140,18 @@ def edit_github(path):
   editor using a html template file.
   """
   config_file = oauth.purl_editor.get(
-    'repos/{}/purl.obolibrary.org/contents/{}'.format(session['user'], path),
-    token=oauth2_tokens[session['user']])
+    'repos/{}/purl.obolibrary.org/contents/{}'.format(session['user']['login'], path),
+    token=session['user']['token'])
   if not config_file:
     raise Exception("Could not get the contents of: {}".format(path))
   config_file = config_file.json()
 
   decodedBytes = base64.b64decode(config_file['content'])
   decodedStr = str(decodedBytes, "utf-8")
-  return render_template('purl_editor.jinja2', yaml=decodedStr, idspace=config_file['name'])
+  return render_template('purl_editor.jinja2',
+                         yaml=decodedStr,
+                         idspace=config_file['name'],
+                         login=session['user']['login'] if session.get('user') else None)
 
 
 @app.route('/<path:path>')
@@ -166,6 +173,9 @@ def validate():
   indicating a summary of the error, the line number of the error (if available), and the detailed
   output of the error.
   """
+  def debug(statement):
+    app.config.get('DEBUG_ENABLED') and print(statement)
+
   def get_error_start(code, start, block_label, item=-1):
     """
     Given some YAML code and a line to begin searching from within it, then if no item is specified
@@ -258,6 +268,7 @@ def validate():
   return Response(status=200)
 
 
+# PROBABLY WE WON'T NEED THIS?
 @app.route('/create_pr', methods=['POST'])
 @github_authorize
 def pr():

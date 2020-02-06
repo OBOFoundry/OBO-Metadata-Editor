@@ -46,7 +46,13 @@
   <h2>OBO PURL YAML Code Editor
     {% if idspace is defined %}
       for {{ idspace | replace(".yml", "") | upper }}
-    {% endif %}</h2>
+    {% endif %}
+  </h2>
+
+  {% if login is not none %}
+    You are logged in as {{ login }}. Click <a href="/logout">here</a> to logout<br/><br/>
+  {% endif %}
+
   <div>
     <ul>
       <li>Press <samp>F11</samp> inside the editor to maximize editor space (<samp>Esc</samp> to revert).</li>
