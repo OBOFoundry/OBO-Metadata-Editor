@@ -7,6 +7,7 @@ import jsonschema
 import logging
 import os
 import re
+import textwrap
 import yaml
 
 from datetime import datetime
@@ -125,10 +126,9 @@ def login():
     return redirect(url_for("index"))
 
 
-@app.route('/logout')
-def logout():
-  session.pop('user_id', None)
-  return redirect(url_for('index'))
+@app.route('/logged_out')
+def logged_out():
+  return render_template('logged_out.jinja2')
 
 
 def verify_logged_in(fn):
@@ -143,9 +143,11 @@ def verify_logged_in(fn):
   return wrapped
 
 
-@app.route('/logged_out')
-def logged_out():
-  return render_template('logged_out.jinja2')
+@app.route('/logout')
+@verify_logged_in
+def logout():
+  session.pop('user_id', None)
+  return redirect(url_for('index'))
 
 
 @app.route('/')
@@ -170,14 +172,41 @@ def send_editor_page(path):
   return send_from_directory(pwd, path, as_attachment=False)
 
 
-@app.route('/edit_new')
+@app.route('/edit_new', methods=['POST'])
 @verify_logged_in
 def edit_new():
+  """
+  INSERT DOC HERE
+  """
+  project_id = request.form.get('projectId')
+  project_org = request.form.get('projectOrg')
+  if any([item is None for item in [project_id, project_org]]):
+    return Response("Malformed POST request", status=400)
+
+  yaml = textwrap.dedent(
+    """
+    # PURL configuration for http://purl.obolibrary.org/obo/{idspace_lower}
+
+    idspace: {idspace_upper}
+    base_url: /obo/{idspace_lower}
+
+    products:
+    - {idspace_lower}.owl: https://raw.githubusercontent.com/{org}/purl.obolibrary.org/master/config/{idspace_lower}.owl
+
+    term_browser: ontobee
+    """).format(idspace_upper=project_id.upper(), idspace_lower=project_id.casefold(), org=project_org)
+
   return render_template('purl_editor.jinja2',
-                         filename='newtestid.yml',
+                         filename='{}.yml'.format(project_id.lower()),
                          existing=False,
-                         yaml="Svaboodia!",
+                         yaml=yaml,
                          login=g.user.github_login)
+
+
+@app.route('/prepare_new', methods=['GET'])
+@verify_logged_in
+def prepare_new():
+  return render_template('prepare_new_config.jinja2', login=g.user.github_login)
 
 
 @app.route('/edit/<path:path>')

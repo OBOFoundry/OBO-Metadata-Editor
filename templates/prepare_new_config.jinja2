@@ -1,0 +1,49 @@
+<!doctype html>
+<meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+<meta content="utf-8" http-equiv="encoding">
+
+{% set appname = "OBO PURL YAML Code Editor" %}
+
+<title>{{ appname }}</title>
+
+{% include 'includes.jinja2' %}
+
+<div class="container-fluid">
+
+  <h2>{{ appname }}</h2>
+
+  {% if login is not none %}
+    <div>
+      You are logged in to the {{ appname }} as <strong>{{ login }}</strong>.
+      Click <a href="/logout">here</a> to logout
+    </div>
+  {% endif %}
+
+  <br/>
+
+  <div>
+    <a href="/">Back to main menu</a>
+  </div>
+
+  <hr/>
+
+  <h4>Add a new project configuration</h4>
+
+  <div class="row">&nbsp;</div>
+
+  <div class="col-sm-4 bg-light border">
+    <div class="row">&nbsp;</div>
+    <form action="/edit_new" method="POST">
+      <div class="form-group">
+        <label for="projectId">Project ID</label>
+        <input type="text" class="form-control" name="projectId" id="projectId" required>
+      </div>
+      <div class="form-group">
+        <label for="projectOrg">Organization or username</label>
+        <input type="text" class="form-control" name="projectOrg" id="projectOrg" required>
+      </div>
+      <button type="submit" class="btn btn-primary mb-2">Submit</button>
+    </form>
+  </div>
+
+</div>
