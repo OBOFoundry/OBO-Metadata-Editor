@@ -11,8 +11,8 @@
 <div class="container-fluid">
 
   <h2>{{ appname }}
-    {% if idspace is defined %}
-      for {{ idspace | replace(".yml", "") | upper }}
+    {% if filename is defined %}
+      for {{ filename | upper | replace(".YML", "") }}
     {% endif %}
   </h2>
 
@@ -37,12 +37,14 @@
   <textarea id="code" class="hidden">{% if yaml is defined %}{{ yaml }}{% endif %}</textarea>
 
   <div>
-    <a class="btn btn-primary" href="/" role="button">Back to main menu</a>
+    <button id="back-btn" class="btn btn-primary" onclick="back_to_main()">Back to main menu</button>
     <button id="validate-btn" class="btn btn-primary" onclick="validate()">Validate</button>
-    {% if idspace is defined %}
-      <button id="pr-btn" class="btn btn-danger" onclick="update_config()" disabled>Submit update</button>
+    {% if filename is defined %}
+      <button id="update-btn" class="btn btn-danger"
+              onclick="update_config('{{ filename }}')" disabled>Submit update
+      </button>
     {% else %}
-      <button id="pr-btn" class="btn btn-danger" onclick="add_config()" disabled>Add file</button>
+      <button id="add-btn" class="btn btn-danger" onclick="add_config()" disabled>Add configuration</button>
     {% endif %}
   </div>
 

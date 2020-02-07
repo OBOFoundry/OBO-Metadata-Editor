@@ -4,9 +4,12 @@ import base64
 import functools
 import json
 import jsonschema
+import logging
 import os
+import re
 import yaml
 
+from datetime import datetime
 from flask import Flask, jsonify, render_template, request, Response, g, send_from_directory, \
   session, redirect, url_for
 from flask_github import GitHub
@@ -25,13 +28,18 @@ from sqlalchemy.ext.declarative import declarative_base
 # FLASK_SECRET_KEY
 
 pwd = os.path.dirname(os.path.realpath(__file__))
-schemafile = "{}/../purl.obolibrary.org/tools/config.schema.json".format(pwd)
-schema = json.load(open(schemafile))
 
 # Setup the webapp:
 app = Flask(__name__)
 app.config.from_object('config')
 app.secret_key = app.config['FLASK_SECRET_KEY']
+
+logging.basicConfig(format='%(asctime)-15s %(name)s %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+logger.setLevel(app.config['LOG_LEVEL'])
+
+schemafile = "{}/../purl.obolibrary.org/tools/config.schema.json".format(pwd)
+schema = json.load(open(schemafile))
 
 # setup github-flask
 github = GitHub(app)
@@ -184,7 +192,7 @@ def edit_config(path):
   decodedStr = str(decodedBytes, "utf-8")
   return render_template('purl_editor.jinja2',
                          yaml=decodedStr,
-                         idspace=config_file['name'],
+                         filename=config_file['name'],
                          login=g.user.github_login)
 
 
@@ -198,9 +206,6 @@ def validate():
   indicating a summary of the error, the line number of the error (if available), and the detailed
   output of the error.
   """
-  def debug(statement):
-    app.config.get('DEBUG_ENABLED') and print(statement)
-
   def get_error_start(code, start, block_label, item=-1):
     """
     Given some YAML code and a line to begin searching from within it, then if no item is specified
@@ -211,8 +216,10 @@ def validate():
     - item 2
     - etc.)
     """
-    debug("Searching from line {} for{}block: '{}'"
-          .format(start + 1, ' item #{} of '.format(item + 1) if item >= 0 else ' ', block_label))
+    logger.debug("Searching from line {line} for{item}block: '{block}'"
+                 .format(line=start + 1,
+                         item=' item #{} of '.format(item + 1) if item >= 0 else ' ',
+                         block=block_label))
     # Split the long code string into individual lines, and discard everything before `start`:
     codelines = code.splitlines()[start:]
     # Lines containing block labels will always be of this form:
@@ -228,7 +235,7 @@ def validate():
       if matched:
         block_start_found = True
         start = start + i
-        debug("Found the start of the block: '{}' at line {}".format(line, start + 1))
+        logger.debug("Found the start of the block: '{}' at line {}".format(line, start + 1))
         # If we have not been instructed to search for an item within the block, then we are done:
         if item < 0:
           return start
@@ -243,15 +250,15 @@ def validate():
 
         # Only consider items that fall directly under this block:
         if item_indent_level == indent_level:
-          debug("Found item #{} of block: '{}' at line {}. Line is: '{}'"
-                .format(curr_item + 1, block_label, start + i + 1, line))
+          logger.debug("Found item #{} of block: '{}' at line {}. Line is: '{}'"
+                       .format(curr_item + 1, block_label, start + i + 1, line))
           # If we have found the nth item, return the line on which it starts:
           if curr_item == item:
             return start + i
           # Otherwise continue looping:
           curr_item += 1
 
-    debug("*** Something went wrong while trying to find the line number ***")
+    logger.debug("*** Something went wrong while trying to find the line number ***")
     return start
 
   if request.form.get('code') is None:
@@ -268,7 +275,7 @@ def validate():
             400)
   except jsonschema.exceptions.ValidationError as err:
     error_summary = err.schema.get('description') or err.message
-    debug("Determining line number for error: {}".format(list(err.absolute_path)))
+    logger.debug("Determining line number for error: {}".format(list(err.absolute_path)))
     start = 0
     if not err.absolute_path:
       return (jsonify({'summary': format(error_summary),
@@ -280,10 +287,10 @@ def validate():
         if type(component) is str:
           block_label = component
           start = get_error_start(code, start, block_label)
-          debug("Error begins at line {}".format(start + 1))
+          logger.debug("Error begins at line {}".format(start + 1))
         elif type(component) is int:
           start = get_error_start(code, start, block_label, component)
-          debug("Error begins at line {}".format(start + 1))
+          logger.debug("Error begins at line {}".format(start + 1))
 
     return (jsonify({'summary': format(error_summary),
                      'line_number': start + 1,
@@ -293,16 +300,70 @@ def validate():
   return Response(status=200)
 
 
-# PROBABLY WE WON'T NEED THIS?
-@app.route('/create_pr', methods=['POST'])
+@app.route('/update_config', methods=['POST'])
 @verify_logged_in
-def pr():
+def update_config():
   """
   Route for initiating a pull request against the github repository.
   """
   filename = request.form.get('filename')
   code = request.form.get('code')
-  if filename is None or code is None:
+  commit_msg = request.form.get('commit_msg')
+  if any([item is None for item in [filename, commit_msg, code]]):
     return Response("Malformed POST request", status=400)
+
+  repo = '{}/purl.obolibrary.org'.format(g.user.github_login)
+
+  # TODO: Do we need to merge upstream/master into the repo before doing anything?
+
+  # Get the sha of the file that you will be committing:
+  response = github.get('repos/{}/contents/config/{}'.format(repo, filename))
+  if not response or 'sha' not in response:
+    return Response("Unable to get the current SHA value for {} in {}"
+                    .format(filename, repo), status=400)
+  file_sha = response['sha']
+
+  # Get the sha for the master branch's HEAD:
+  response = github.get('repos/{}/git/ref/heads/master'.format(repo))
+  if not response or 'object' not in response or 'sha' not in response['object']:
+    return Response("Unable to get SHA for HEAD of master in {}".format(repo), status=400)
+  master_sha = response['object']['sha']
+
+  # Create a new branch:
+  new_branch = "{login}_{idspace}_{utc}".format(
+    login=g.user.github_login,
+    idspace=filename.replace(".yml", "").upper(),
+    utc=datetime.utcnow().strftime("%Y-%m-%d_%H%M%S"))
+
+  logger.info("Creating a new branch: {} in {}".format(new_branch, repo))
+  response = github.post('repos/{}/git/refs'.format(repo),
+                         data={'ref': 'refs/heads/' + new_branch, 'sha': master_sha})
+  if not response:
+    return Response("Unable to create new branch {} in {}".format(new_branch, repo), status=400)
+
+  # Commit to the branch:
+  logger.info("Committing change of {} to branch {} in {}".format(filename, new_branch, repo))
+  response = github.put('repos/{}/contents/config/{}'.format(repo, filename),
+                        data={'message': commit_msg,
+                              'content': base64.b64encode(code.encode("utf-8")).decode(),
+                              # NOTE THAT FOR THE ADD_CONFIG FUNCTION WE WILL OMIT THE SHA
+                              'sha': file_sha,
+                              'branch': new_branch})
+  if not response:
+    return Response("Unable to commit change of {} to branch {} in {}"
+                    .format(filename, new_branch, repo), status=400)
+
+  # Create a pull request:
+  logger.info("Creating a PR for branch {} in {}".format(new_branch, repo))
+  moderator = app.config.get('PURL_MODERATOR')
+  response = github.post('repos/{}/pulls'.format(repo),
+                         data={'title': "Request to merge branch {} to master".format(new_branch),
+                               # NOTE: PREPEND "<login>:" TO BRANCH NAMEFOR CROSS-REPO PRs
+                               'head': new_branch,
+                               'base': 'master',
+                               # Notify the moderator:
+                               'body': '@{}'.format(moderator)})
+  if not response:
+    return Response("Unable to create PR for branch {} in {}".format(new_branch, repo), status=400)
 
   return Response(status=200)

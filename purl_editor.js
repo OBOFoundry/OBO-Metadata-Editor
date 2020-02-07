@@ -1,4 +1,17 @@
 /**
+ * ADD DOC HERE
+ */
+var get_commit_btn = function() {
+  if (document.getElementById("update-btn")) {
+    return document.getElementById("update-btn");
+  }
+  else {
+    return document.getElementById("add-btn");
+  }
+}
+
+
+/**
  * Initialize the editor instance if the element with the id "code" exists:
  */
 var editor;
@@ -67,7 +80,7 @@ if (document.getElementById("code")) {
    * lines into the editor.
    */
   editor.on("changes", function() {
-    document.getElementById("pr-btn").disabled = true;
+    get_commit_btn().disabled = true;
     editor.scrollIntoView(what={line: editor.getCursor().line, ch: 0}, margin=12);
   });
 
@@ -76,9 +89,7 @@ if (document.getElementById("code")) {
    * Disable the editor if the user refreshes or otherwise leaves the page
    */
   window.onbeforeunload = function() {
-    if (document.getElementById("pr-btn")) {
-      document.getElementById("pr-btn").disabled = true;
-    }
+    get_commit_btn().disabled = true;
   }
 }
 
@@ -237,12 +248,12 @@ var validate = function() {
       if (!request.status) {
         statusArea.style.color = "#FF0000";
         statusArea.innerHTML = "Problem communicating with server";
-        document.getElementById("pr-btn").disabled = true;
+        get_commit_btn().disabled = true;
       }
       else if (request.status === 200) {
         statusArea.style.color = "#00CD00";
         statusArea.innerHTML = "Validation successful";
-        document.getElementById("pr-btn").disabled = false;
+        get_commit_btn().disabled = false;
       }
       else {
         // Display the error message in the status area. Note that we must replace any angle
@@ -256,7 +267,7 @@ var validate = function() {
         alertText = '<div class="preformatted">' + alertText + '</div>';
         statusArea.style.color = "#FF0000";
         statusArea.innerHTML = alertText;
-        document.getElementById("pr-btn").disabled = true;
+        get_commit_btn().disabled = true;
         // If the line number is valid, then add it to the message and highlight that line in the
         // editor while scrolling it into view.
         if (response.line_number >= 0) {
@@ -282,20 +293,16 @@ var validate = function() {
 
 
 /**
- * Pr the contents of the editor
+ * INSERT DOC HERE
  */
-var create_pr = function() {
-  // Get a confirmation from the user:
-  bootbox.confirm({ 
-    size: "large",
+var back_to_main = function() {
+  bootbox.confirm({
     closeButton: false,
-    title: "Confirm creation of pull request",
-    message: 'By continuing <b>you will initiate a pull request</b> in the purl.obolibrary.org ' +
-      'repository containing the changes you have made to this file. Please confirm that you ' +
-      'really want to do this.',
+    title: "Please confirm your action",
+    message: "Any changes you have made will not be saved. Are you sure that you want to leave?",
     buttons: {
       confirm: {
-        label: 'Create a pull request',
+        label: 'Leave page',
         className: 'btn-danger'
       },
       cancel: {
@@ -305,8 +312,51 @@ var create_pr = function() {
     },
     callback: function(result) {
       if (result) {
+        window.location = '/';
+      }
+    }
+  });
+}
+
+
+/**
+ * ADD DOC HERE
+ */
+var add_config = function() {
+  bootbox.alert("Not implemented yet");
+}
+
+
+/**
+ * Update the config file on git'ub
+ */
+var update_config = function(filename) {
+  // Get a confirmation from the user:
+  bootbox.prompt({
+    title: "Please describe the changes you have made to " +
+      filename.toUpperCase().replace(".YML", ""),
+    inputType: 'textarea',
+    buttons: {
+      confirm: {
+        label: 'Submit',
+        className: 'btn-danger'
+      },
+      cancel: {
+        label: 'Cancel',
+        className: 'btn-primary'
+      }
+    },
+    callback: function(commit_msg) {
+      if (commit_msg !== null && commit_msg !== undefined) {
+        if (!commit_msg || commit_msg.trim() === "") {
+          bootbox.alert({
+            closeButton: false,
+            message: "Commit message cannot be empty. Your change has not been submitted."});
+          return;
+        }
+
         // Disable the pr button:
-        document.getElementById("pr-btn").disabled = true;
+        get_commit_btn().disabled = true;
 
         // Extract the code from the text area:
         var code = document.getElementById("code").value;
@@ -314,7 +364,7 @@ var create_pr = function() {
         // Clear the status area:
         var statusArea = document.getElementById("status-area");
         statusArea.style.color = "#000000";
-        statusArea.innerHTML = "Creating PR ...";
+        statusArea.innerHTML = "Submitting update ...";
 
         // Embed the code into a POST request and send it to the server for processing.
         var request = new XMLHttpRequest();
@@ -326,12 +376,13 @@ var create_pr = function() {
             }
             else if (request.status === 200) {
               statusArea.style.color = "#00CD00";
-              statusArea.innerHTML = "PR creation successful";
+              statusArea.innerHTML = "Update submitted successfully. The changes will be " +
+                "reviewed by a moderator before being added to the repository.";
             }
             else {
               // Display the error message in the status area. Note that we must replace any angle
               // angle brackets with HTML escape codes.
-              alertText = "Pr creation failed.\n\n" +
+              alertText = "Submission of update failed.\n\n" +
                 request.responseText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
               alertText = '<div class="preformatted">' + alertText + '</div>';
               statusArea.style.color = "#FF0000";
@@ -339,10 +390,11 @@ var create_pr = function() {
             }
           }
         }
-        request.open('POST', '/create_pr', true);
+        request.open('POST', '/update_config', true);
         request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
-        // TODO: agro.yml is hard-coded ...
-        request.send("filename=" + 'agro.yml' + '&code=' + encodeURIComponent(code))
+        request.send('filename=' + filename +
+                     '&commit_msg=' + commit_msg +
+                     '&code=' + encodeURIComponent(code))
       }
     }
   });
