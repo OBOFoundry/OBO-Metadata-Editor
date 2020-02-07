@@ -173,7 +173,11 @@ def send_editor_page(path):
 @app.route('/edit_new')
 @verify_logged_in
 def edit_new():
-  return render_template('purl_editor.jinja2')
+  return render_template('purl_editor.jinja2',
+                         filename='newtestid.yml',
+                         existing=False,
+                         yaml="Svaboodia!",
+                         login=g.user.github_login)
 
 
 @app.route('/edit/<path:path>')
@@ -191,6 +195,7 @@ def edit_config(path):
   decodedBytes = base64.b64decode(config_file['content'])
   decodedStr = str(decodedBytes, "utf-8")
   return render_template('purl_editor.jinja2',
+                         existing=True,
                          yaml=decodedStr,
                          filename=config_file['name'],
                          login=g.user.github_login)
@@ -300,11 +305,71 @@ def validate():
   return Response(status=200)
 
 
+@app.route('/add_config', methods=['POST'])
+@verify_logged_in
+def add_config():
+  """
+  Route for initiating a pull request to add a config file to the repository
+  """
+  filename = request.form.get('filename')
+  code = request.form.get('code')
+  commit_msg = request.form.get('commit_msg')
+  if any([item is None for item in [filename, commit_msg, code]]):
+    return Response("Malformed POST request", status=400)
+
+  repo = '{}/purl.obolibrary.org'.format(g.user.github_login)
+
+  # TODO: Do we need to merge upstream/master into the repo before doing anything?
+
+  # Get the sha for the master branch's HEAD:
+  response = github.get('repos/{}/git/ref/heads/master'.format(repo))
+  if not response or 'object' not in response or 'sha' not in response['object']:
+    return Response("Unable to get SHA for HEAD of master in {}".format(repo), status=400)
+  master_sha = response['object']['sha']
+
+  # Create a new branch:
+  new_branch = "{login}_{idspace}_{utc}".format(
+    login=g.user.github_login,
+    idspace=filename.replace(".yml", "").upper(),
+    utc=datetime.utcnow().strftime("%Y-%m-%d_%H%M%S"))
+
+  logger.info("Creating a new branch: {} in {}".format(new_branch, repo))
+  response = github.post('repos/{}/git/refs'.format(repo),
+                         data={'ref': 'refs/heads/' + new_branch, 'sha': master_sha})
+  if not response:
+    return Response("Unable to create new branch {} in {}".format(new_branch, repo), status=400)
+
+  # Commit to the branch:
+  logger.info("Committing addition of {} to branch {} in {}".format(filename, new_branch, repo))
+  response = github.put('repos/{}/contents/config/{}'.format(repo, filename),
+                        data={'message': commit_msg,
+                              'content': base64.b64encode(code.encode("utf-8")).decode(),
+                              'branch': new_branch})
+  if not response:
+    return Response("Unable to commit addition of {} to branch {} in {}"
+                    .format(filename, new_branch, repo), status=400)
+
+  # Create a pull request:
+  logger.info("Creating a PR for branch {} in {}".format(new_branch, repo))
+  moderator = app.config.get('PURL_MODERATOR')
+  response = github.post('repos/{}/pulls'.format(repo),
+                         data={'title': "Request to merge branch {} to master".format(new_branch),
+                               # NOTE: PREPEND "<login>:" TO BRANCH NAMEFOR CROSS-REPO PRs
+                               'head': new_branch,
+                               'base': 'master',
+                               # Notify the moderator:
+                               'body': '@{}'.format(moderator)})
+  if not response:
+    return Response("Unable to create PR for branch {} in {}".format(new_branch, repo), status=400)
+
+  return Response(status=200)
+
+
 @app.route('/update_config', methods=['POST'])
 @verify_logged_in
 def update_config():
   """
-  Route for initiating a pull request against the github repository.
+  Route for initiating a pull request to update a config file in the github repository.
   """
   filename = request.form.get('filename')
   code = request.form.get('code')

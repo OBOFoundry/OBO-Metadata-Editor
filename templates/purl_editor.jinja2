@@ -10,10 +10,7 @@
 
 <div class="container-fluid">
 
-  <h2>{{ appname }}
-    {% if filename is defined %}
-      for {{ filename | upper | replace(".YML", "") }}
-    {% endif %}
+  <h2>{{ appname }} for {{ filename | upper | replace(".YML", "") }}
   </h2>
 
   {% if login is not none %}
@@ -39,12 +36,14 @@
   <div>
     <button id="back-btn" class="btn btn-primary" onclick="back_to_main()">Back to main menu</button>
     <button id="validate-btn" class="btn btn-primary" onclick="validate()">Validate</button>
-    {% if filename is defined %}
+    {% if existing %}
       <button id="update-btn" class="btn btn-danger"
               onclick="update_config('{{ filename }}')" disabled>Submit update
       </button>
     {% else %}
-      <button id="add-btn" class="btn btn-danger" onclick="add_config()" disabled>Add configuration</button>
+      <button id="add-btn" class="btn btn-danger" onclick="add_config('{{ filename }}')" disabled>
+        Add configuration
+      </button>
     {% endif %}
   </div>
 

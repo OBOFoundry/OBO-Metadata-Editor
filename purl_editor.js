@@ -322,8 +322,74 @@ var back_to_main = function() {
 /**
  * ADD DOC HERE
  */
-var add_config = function() {
-  bootbox.alert("Not implemented yet");
+var add_config = function(filename) {
+  // Get a confirmation from the user:
+  bootbox.prompt({
+    title: "Please describe the new configuration you would like to add: " +
+      filename.toUpperCase().replace(".YML", ""),
+    inputType: 'textarea',
+    buttons: {
+      confirm: {
+        label: 'Submit',
+        className: 'btn-danger'
+      },
+      cancel: {
+        label: 'Cancel',
+        className: 'btn-primary'
+      }
+    },
+    callback: function(commit_msg) {
+      if (commit_msg !== null && commit_msg !== undefined) {
+        if (!commit_msg || commit_msg.trim() === "") {
+          bootbox.alert({
+            closeButton: false,
+            message: "Commit message cannot be empty. New configuration was not submitted."});
+          return;
+        }
+
+        // Disable the add button:
+        get_commit_btn().disabled = true;
+
+        // Extract the code from the text area:
+        var code = document.getElementById("code").value;
+
+        // Clear the status area:
+        var statusArea = document.getElementById("status-area");
+        statusArea.style.color = "#000000";
+        statusArea.innerHTML = "Submitting new configuration ...";
+
+        // Embed the code into a POST request and send it to the server for processing.
+        var request = new XMLHttpRequest();
+        request.onreadystatechange = function() {
+          if (request.readyState === 4) {
+            if (!request.status) {
+              statusArea.style.color = "#FF0000";
+              statusArea.innerHTML = "Problem communicating with server";
+            }
+            else if (request.status === 200) {
+              statusArea.style.color = "#00CD00";
+              statusArea.innerHTML = "New configuration submitted successfully. It will be " +
+                "reviewed by a moderator before being added to the repository.";
+            }
+            else {
+              // Display the error message in the status area. Note that we must replace any angle
+              // angle brackets with HTML escape codes.
+              alertText = "Submission of new configuration failed.\n\n" +
+                request.responseText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+              alertText = '<div class="preformatted">' + alertText + '</div>';
+              statusArea.style.color = "#FF0000";
+              statusArea.innerHTML = alertText;
+            }
+          }
+        }
+        request.open('POST', '/add_config', true);
+        request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+        request.send('filename=' + filename +
+                     '&commit_msg=' + commit_msg +
+                     '&code=' + encodeURIComponent(code))
+      }
+    }
+  });
 }
 
 
@@ -355,7 +421,7 @@ var update_config = function(filename) {
           return;
         }
 
-        // Disable the pr button:
+        // Disable the update button:
         get_commit_btn().disabled = true;
 
         // Extract the code from the text area:
