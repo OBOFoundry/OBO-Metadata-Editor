@@ -305,6 +305,75 @@ def validate():
   return Response(status=200)
 
 
+def get_file_sha(repo, filename):
+  """
+  Get the sha of the file that you will be committing
+  """
+  response = github.get('repos/{}/contents/config/{}'.format(repo, filename))
+  if not response or 'sha' not in response:
+    raise Exception("Unable to get the current SHA value for {} in {}"
+                    .format(filename, repo))
+  return response['sha']
+
+
+def get_master_sha(repo):
+  """
+  Get the sha for the master branch's HEAD
+  """
+  response = github.get('repos/{}/git/ref/heads/master'.format(repo))
+  if not response or 'object' not in response or 'sha' not in response['object']:
+    raise Exception("Unable to get SHA for HEAD of master in {}".format(repo))
+  return response['object']['sha']
+
+
+def create_branch(repo, filename, master_sha):
+  """
+  Create a new branch from master
+  """
+  branch = "{login}_{idspace}_{utc}".format(
+    login=g.user.github_login,
+    idspace=filename.replace(".yml", "").upper(),
+    utc=datetime.utcnow().strftime("%Y-%m-%d_%H%M%S"))
+
+  response = github.post('repos/{}/git/refs'.format(repo),
+                         data={'ref': 'refs/heads/' + branch, 'sha': master_sha})
+  if not response:
+    raise Exception("Unable to create new branch {} in {}".format(branch, repo))
+
+  return branch
+
+
+def commit_to_branch(repo, branch, code, filename, commit_msg, file_sha=None):
+  """
+  Commit the code to the branch in the repo
+  """
+  data = {'message': commit_msg,
+          'content': base64.b64encode(code.encode("utf-8")).decode(),
+          'branch': branch}
+
+  if file_sha:
+    data['sha'] = file_sha
+
+  response = github.put('repos/{}/contents/config/{}'.format(repo, filename), data=data)
+  if not response:
+    raise Exception("Unable to commit addition of {} to branch {} in {}"
+                    .format(filename, branch, repo))
+
+
+def create_pr(repo, branch):
+  # Create a pull request:
+  moderator = app.config.get('PURL_MODERATOR')
+  response = github.post('repos/{}/pulls'.format(repo),
+                         data={'title': "Request to merge branch {} to master".format(branch),
+                               # NOTE: PREPEND "<login>:" TO BRANCH NAMEFOR CROSS-REPO PRs
+                               'head': branch,
+                               'base': 'master',
+                               # Notify the moderator:
+                               'body': '@{}'.format(moderator)})
+  if not response:
+    raise Exception("Unable to create PR for branch {} in {}".format(branch, repo))
+
+
 @app.route('/add_config', methods=['POST'])
 @verify_logged_in
 def add_config():
@@ -321,46 +390,16 @@ def add_config():
 
   # TODO: Do we need to merge upstream/master into the repo before doing anything?
 
-  # Get the sha for the master branch's HEAD:
-  response = github.get('repos/{}/git/ref/heads/master'.format(repo))
-  if not response or 'object' not in response or 'sha' not in response['object']:
-    return Response("Unable to get SHA for HEAD of master in {}".format(repo), status=400)
-  master_sha = response['object']['sha']
-
-  # Create a new branch:
-  new_branch = "{login}_{idspace}_{utc}".format(
-    login=g.user.github_login,
-    idspace=filename.replace(".yml", "").upper(),
-    utc=datetime.utcnow().strftime("%Y-%m-%d_%H%M%S"))
-
-  logger.info("Creating a new branch: {} in {}".format(new_branch, repo))
-  response = github.post('repos/{}/git/refs'.format(repo),
-                         data={'ref': 'refs/heads/' + new_branch, 'sha': master_sha})
-  if not response:
-    return Response("Unable to create new branch {} in {}".format(new_branch, repo), status=400)
-
-  # Commit to the branch:
-  logger.info("Committing addition of {} to branch {} in {}".format(filename, new_branch, repo))
-  response = github.put('repos/{}/contents/config/{}'.format(repo, filename),
-                        data={'message': commit_msg,
-                              'content': base64.b64encode(code.encode("utf-8")).decode(),
-                              'branch': new_branch})
-  if not response:
-    return Response("Unable to commit addition of {} to branch {} in {}"
-                    .format(filename, new_branch, repo), status=400)
-
-  # Create a pull request:
-  logger.info("Creating a PR for branch {} in {}".format(new_branch, repo))
-  moderator = app.config.get('PURL_MODERATOR')
-  response = github.post('repos/{}/pulls'.format(repo),
-                         data={'title': "Request to merge branch {} to master".format(new_branch),
-                               # NOTE: PREPEND "<login>:" TO BRANCH NAMEFOR CROSS-REPO PRs
-                               'head': new_branch,
-                               'base': 'master',
-                               # Notify the moderator:
-                               'body': '@{}'.format(moderator)})
-  if not response:
-    return Response("Unable to create PR for branch {} in {}".format(new_branch, repo), status=400)
+  try:
+    master_sha = get_master_sha(repo)
+    new_branch = create_branch(repo, filename, master_sha)
+    logger.info("Created a new branch: {} in {}".format(new_branch, repo))
+    commit_to_branch(repo, new_branch, code, filename, commit_msg)
+    logger.info("Committed addition of {} to branch {} in {}".format(filename, new_branch, repo))
+    create_pr(repo, new_branch)
+    logger.info("Created a PR for branch {} in {}".format(new_branch, repo))
+  except Exception as e:
+    return Response(format(e), status=400)
 
   return Response(status=200)
 
@@ -381,54 +420,16 @@ def update_config():
 
   # TODO: Do we need to merge upstream/master into the repo before doing anything?
 
-  # Get the sha of the file that you will be committing:
-  response = github.get('repos/{}/contents/config/{}'.format(repo, filename))
-  if not response or 'sha' not in response:
-    return Response("Unable to get the current SHA value for {} in {}"
-                    .format(filename, repo), status=400)
-  file_sha = response['sha']
-
-  # Get the sha for the master branch's HEAD:
-  response = github.get('repos/{}/git/ref/heads/master'.format(repo))
-  if not response or 'object' not in response or 'sha' not in response['object']:
-    return Response("Unable to get SHA for HEAD of master in {}".format(repo), status=400)
-  master_sha = response['object']['sha']
-
-  # Create a new branch:
-  new_branch = "{login}_{idspace}_{utc}".format(
-    login=g.user.github_login,
-    idspace=filename.replace(".yml", "").upper(),
-    utc=datetime.utcnow().strftime("%Y-%m-%d_%H%M%S"))
-
-  logger.info("Creating a new branch: {} in {}".format(new_branch, repo))
-  response = github.post('repos/{}/git/refs'.format(repo),
-                         data={'ref': 'refs/heads/' + new_branch, 'sha': master_sha})
-  if not response:
-    return Response("Unable to create new branch {} in {}".format(new_branch, repo), status=400)
-
-  # Commit to the branch:
-  logger.info("Committing change of {} to branch {} in {}".format(filename, new_branch, repo))
-  response = github.put('repos/{}/contents/config/{}'.format(repo, filename),
-                        data={'message': commit_msg,
-                              'content': base64.b64encode(code.encode("utf-8")).decode(),
-                              # NOTE THAT FOR THE ADD_CONFIG FUNCTION WE WILL OMIT THE SHA
-                              'sha': file_sha,
-                              'branch': new_branch})
-  if not response:
-    return Response("Unable to commit change of {} to branch {} in {}"
-                    .format(filename, new_branch, repo), status=400)
-
-  # Create a pull request:
-  logger.info("Creating a PR for branch {} in {}".format(new_branch, repo))
-  moderator = app.config.get('PURL_MODERATOR')
-  response = github.post('repos/{}/pulls'.format(repo),
-                         data={'title': "Request to merge branch {} to master".format(new_branch),
-                               # NOTE: PREPEND "<login>:" TO BRANCH NAMEFOR CROSS-REPO PRs
-                               'head': new_branch,
-                               'base': 'master',
-                               # Notify the moderator:
-                               'body': '@{}'.format(moderator)})
-  if not response:
-    return Response("Unable to create PR for branch {} in {}".format(new_branch, repo), status=400)
+  try:
+    file_sha = get_file_sha(repo, filename)
+    master_sha = get_master_sha(repo)
+    new_branch = create_branch(repo, filename, master_sha)
+    logger.info("Created a new branch: {} in {}".format(new_branch, repo))
+    commit_to_branch(repo, new_branch, code, filename, commit_msg, file_sha)
+    logger.info("Committed update of {} to branch {} in {}".format(filename, new_branch, repo))
+    create_pr(repo, new_branch)
+    logger.info("Created a PR for branch {} in {}".format(new_branch, repo))
+  except Exception as e:
+    return Response(format(e), status=400)
 
   return Response(status=200)
