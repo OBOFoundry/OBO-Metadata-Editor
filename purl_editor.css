@@ -1,8 +1,14 @@
+caption {
+    caption-side: top;
+    font-weight: bold;
+}
+
 .hidden {
     display: none;
 }
 
 button:disabled {
+    display: none;
     cursor: not-allowed;
     pointer-events: all !important;
 }

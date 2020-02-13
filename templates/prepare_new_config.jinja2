@@ -10,20 +10,16 @@
 
 <div class="container-fluid">
 
-  <h2>{{ appname }}</h2>
+  <h2><a href="/">{{ appname }}</a></h2>
 
   {% if login is not none %}
     <div>
-      You are logged in to the {{ appname }} as <strong>{{ login }}</strong>.
+      You are logged in as <strong>{{ login }}</strong>.
       Click <a href="/logout">here</a> to logout
     </div>
   {% endif %}
 
   <br/>
-
-  <div>
-    <a href="/">Back to main menu</a>
-  </div>
 
   <hr/>
 
@@ -31,16 +27,38 @@
 
   <div class="row">&nbsp;</div>
 
+  {% if notfound is defined %}
+    <div class="col-sm-4 alert alert-warning" role="alert">
+      {{ notfound }}
+    </div>
+  {% endif %}
+
   <div class="col-sm-4 bg-light border">
     <div class="row">&nbsp;</div>
     <form action="/edit_new" method="POST">
       <div class="form-group">
-        <label for="projectId">Project ID</label>
-        <input type="text" class="form-control" name="projectId" id="projectId" required>
+        <label for="projectId">ID</label>
+        <input type="text" class="form-control" name="projectId" id="projectId"
+               {% if project_id is defined %}
+                 value="{{ project_id }}"
+               {% endif %}
+               required>
       </div>
       <div class="form-group">
-        <label for="projectOrg">Organization or username</label>
-        <input type="text" class="form-control" name="projectOrg" id="projectOrg" required>
+        <label for="projectOrg">GitHub organization/username</label>
+        <input type="text" class="form-control" name="projectOrg" id="projectOrg"
+               {% if project_org is defined %}
+                 value="{{ project_org }}"
+               {% endif %}
+               required>
+      </div>
+      <div class="form-group">
+        <label for="projectOrg">GitHub project</label>
+        <input type="text" class="form-control" name="projectGit" id="projectGit"
+               {% if project_git is defined %}
+                 value="{{ project_git }}"
+               {% endif %}
+               required>
       </div>
       <button type="submit" class="btn btn-primary mb-2">Submit</button>
     </form>

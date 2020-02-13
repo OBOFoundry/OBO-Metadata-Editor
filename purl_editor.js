@@ -86,10 +86,12 @@ if (document.getElementById("code")) {
 
 
   /**
-   * Disable the editor if the user refreshes or otherwise leaves the page
+   * Disable the commit button if the user refreshes or otherwise leaves the page,
+   * and ask the user to confirm.
    */
   window.onbeforeunload = function() {
     get_commit_btn().disabled = true;
+    return "Do you really want to leave this page? Your edits will not be saved.";
   }
 }
 
@@ -228,7 +230,7 @@ var purlYamlHint = function(editor, options) {
 /**
  * Validates the contents of the editor, displaying the validation result in the status area.
  */
-var validate = function() {
+var validate = function(filename) {
   // Save the contents of the editor to its associated text area:
   editor.save();
 
@@ -240,10 +242,29 @@ var validate = function() {
   statusArea.style.color = "#000000";
   statusArea.innerHTML = "Validating ...";
 
+  // Before doing anything else, make sure that the idspace indicated in the code matches the
+  // idspace being edited:
+  var expected_idspace = filename.toUpperCase().replace(".YML", "");
+  var actual_idspace = code.match(/\n[^\S\r\n]*idspace:[^\S\r\n]+(.+?)[^\S\r\n]*\n/);
+  if (!actual_idspace) {
+    statusArea.style.color = "#FF0000";
+    statusArea.innerHTML = "'idspace:' is required"
+    get_commit_btn().disabled = true;
+    return;
+  }
+  else if (actual_idspace[1] !== expected_idspace) {
+    statusArea.style.color = "#FF0000";
+    statusArea.innerHTML = "idspace: '" + actual_idspace[1] +
+      "' does not match expected idspace: '" + expected_idspace + "'";
+    get_commit_btn().disabled = true;
+    return;
+  }
+
   // Embed the code into a POST request and send it to the server for processing.
   // If the validation is successful, enable the Pr button, otherwise disable it.
   var request = new XMLHttpRequest();
   request.onreadystatechange = function() {
+    $("*").css("cursor", "default");
     if (request.readyState === 4) {
       if (!request.status) {
         statusArea.style.color = "#FF0000";
@@ -289,34 +310,8 @@ var validate = function() {
   request.open('POST', '/validate', true);
   request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
   request.send("code=" + encodeURIComponent(code));
+  $("*").css("cursor", "progress");
 };
-
-
-/**
- * INSERT DOC HERE
- */
-var back_to_main = function() {
-  bootbox.confirm({
-    closeButton: false,
-    title: "Please confirm your action",
-    message: "Any changes you have made will not be saved. Are you sure that you want to leave?",
-    buttons: {
-      confirm: {
-        label: 'Leave page',
-        className: 'btn-danger'
-      },
-      cancel: {
-        label: 'Cancel',
-        className: 'btn-primary'
-      }
-    },
-    callback: function(result) {
-      if (result) {
-        window.location = '/';
-      }
-    }
-  });
-}
 
 
 /**
@@ -328,6 +323,7 @@ var add_config = function(filename) {
     title: "Please describe the new configuration you would like to add: " +
       filename.toUpperCase().replace(".YML", ""),
     inputType: 'textarea',
+    value: 'Adding ' + filename,
     buttons: {
       confirm: {
         label: 'Submit',
@@ -361,15 +357,20 @@ var add_config = function(filename) {
         // Embed the code into a POST request and send it to the server for processing.
         var request = new XMLHttpRequest();
         request.onreadystatechange = function() {
+          $("*").css("cursor", "default");
           if (request.readyState === 4) {
             if (!request.status) {
               statusArea.style.color = "#FF0000";
               statusArea.innerHTML = "Problem communicating with server";
             }
             else if (request.status === 200) {
+              var response = JSON.parse(request.responseText);
+              var prInfo = response['pr_info'];
               statusArea.style.color = "#00CD00";
-              statusArea.innerHTML = "New configuration submitted successfully. It will be " +
-                "reviewed by a moderator before being added to the repository.";
+              statusArea.innerHTML = 'New configuration submitted successfully. It will be ' +
+                'reviewed by a moderator before being added to the repository. Click ' +
+                '<a href="' + prInfo['html_url'] + '" target="__blank">here</a> to view your ' +
+                'pull request on GitHub.';
             }
             else {
               // Display the error message in the status area. Note that we must replace any angle
@@ -387,6 +388,7 @@ var add_config = function(filename) {
         request.send('filename=' + filename +
                      '&commit_msg=' + commit_msg +
                      '&code=' + encodeURIComponent(code))
+        $("*").css("cursor", "progress");
       }
     }
   });
@@ -402,6 +404,7 @@ var update_config = function(filename) {
     title: "Please describe the changes you have made to " +
       filename.toUpperCase().replace(".YML", ""),
     inputType: 'textarea',
+    value: 'Updating ' + filename,
     buttons: {
       confirm: {
         label: 'Submit',
@@ -435,15 +438,20 @@ var update_config = function(filename) {
         // Embed the code into a POST request and send it to the server for processing.
         var request = new XMLHttpRequest();
         request.onreadystatechange = function() {
+          $("*").css("cursor", "default");
           if (request.readyState === 4) {
             if (!request.status) {
               statusArea.style.color = "#FF0000";
               statusArea.innerHTML = "Problem communicating with server";
             }
             else if (request.status === 200) {
+              var response = JSON.parse(request.responseText);
+              var prInfo = response['pr_info'];
               statusArea.style.color = "#00CD00";
-              statusArea.innerHTML = "Update submitted successfully. The changes will be " +
-                "reviewed by a moderator before being added to the repository.";
+              statusArea.innerHTML = 'Update submitted successfully. The changes will be ' +
+                'reviewed by a moderator before being added to the repository. Click ' +
+                '<a href="' + prInfo['html_url'] + '" target="__blank">here</a> to view your ' +
+                'pull request on GitHub.';
             }
             else {
               // Display the error message in the status area. Note that we must replace any angle
@@ -461,6 +469,7 @@ var update_config = function(filename) {
         request.send('filename=' + filename +
                      '&commit_msg=' + commit_msg +
                      '&code=' + encodeURIComponent(code))
+        $("*").css("cursor", "progress");
       }
     }
   });

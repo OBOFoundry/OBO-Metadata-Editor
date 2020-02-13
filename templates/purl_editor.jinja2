@@ -10,23 +10,23 @@
 
 <div class="container-fluid">
 
-  <h2>{{ appname }} for {{ filename | upper | replace(".YML", "") }}
-  </h2>
+  <h2><a href="/">{{ appname }}</a></h2>
 
   {% if login is not none %}
     <div>
-      You are logged in to the {{ appname }} as <strong>{{ login }}</strong>. Click <a href="/logout">here</a> to logout
+      You are logged in as <strong>{{ login }}</strong>. Click <a href="/logout">here</a> to logout
     </div>
   {% endif %}
 
   <hr/>
 
-  <div>
-    <ul>
-      <li>Press <samp>F11</samp> inside the editor to maximize editor space (<samp>Esc</samp> to revert).</li>
-      <li>Press <samp>Ctrl-space</samp> for autocompletion.</li>
-    </ul>
-  </div>
+  <h3>
+    {% if existing %}
+      Editing
+    {% else %}
+      Adding
+    {% endif %}
+    project configuration: {{ filename | upper | replace(".YML", "") }}</h3>
 
   <!-- Here is where the CodeMirror editor will live. This element is hidden but it will be used all
        the same to generate the CodeMirror editor.  -->
@@ -34,8 +34,9 @@
   <textarea id="code" class="hidden">{% if yaml is defined %}{{ yaml }}{% endif %}</textarea>
 
   <div>
-    <button id="back-btn" class="btn btn-primary" onclick="back_to_main()">Back to main menu</button>
-    <button id="validate-btn" class="btn btn-primary" onclick="validate()">Validate</button>
+    <button id="validate-btn" class="btn btn-primary" onclick="validate('{{ filename }}')">
+      Validate
+    </button>
     {% if existing %}
       <button id="update-btn" class="btn btn-danger"
               onclick="update_config('{{ filename }}')" disabled>Submit update

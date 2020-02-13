@@ -13,16 +13,18 @@ import yaml
 from datetime import datetime
 from flask import Flask, jsonify, render_template, request, Response, g, send_from_directory, \
   session, redirect, url_for
-from flask_github import GitHub
+from flask_github import GitHub, GitHubError
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+from urllib.request import urlopen
+from urllib.error import HTTPError
 
 # To run in development mode, do:
 # export FLASK_APP=server.py
 # export FLASK_DEBUG=1 (optional)
 # python3 -m flask run
-#
+
 # Note that the following environment variables must be set:
 # GITHUB_CLIENT_ID
 # GITHUB_CLIENT_SECRET
@@ -52,8 +54,15 @@ db_session = scoped_session(sessionmaker(autocommit=False,
                                          bind=engine))
 Base = declarative_base()
 Base.query = db_session.query_property()
-Base.metadata.create_all(bind=engine)
 
+
+# Ontology metadata:
+try:
+  ontology_md = urlopen(app.config['ONTOLOGY_METADATA_URL'])
+  if ontology_md.getcode() == 200:
+    ontology_md = yaml.load(ontology_md.read(), Loader=yaml.SafeLoader)['ontologies']
+except HTTPError as e:
+  ontology_md = {}
 
 # The users database table which holds information for users that have been authenticated
 class User(Base):
@@ -66,7 +75,6 @@ class User(Base):
 
   def __init__(self, github_access_token):
     self.github_access_token = github_access_token
-
 
 @app.before_request
 def before_request():
@@ -156,11 +164,22 @@ def index():
   """
   Renders the index page of the application
   """
+  # TODO: We will not be using forked repos.
   configs = github.get('repos/{}/purl.obolibrary.org/contents/config'.format(g.user.github_login))
   if not configs:
     raise Exception("Could not get contents of the config directory")
 
-  return render_template('index.jinja2', configs=configs, login=g.user.github_login)
+  processed_configs = []
+  for config in configs:
+    config_id = config['name'].casefold().replace(".yml", "")
+    if config_id != "obo":
+      config_title = [o['title'] for o in ontology_md if o['id'] == config_id]
+      config_title = config_title.pop() if config_title else ""
+      processed_configs.append({'name': config['name'],
+                                'path': config['path'],
+                                'title': config_title})
+
+  return render_template('index.jinja2', configs=processed_configs, login=g.user.github_login)
 
 
 @app.route('/<path:path>')
@@ -180,8 +199,19 @@ def edit_new():
   """
   project_id = request.form.get('projectId')
   project_org = request.form.get('projectOrg')
-  if any([item is None for item in [project_id, project_org]]):
+  project_git = request.form.get('projectGit')
+  if any([item is None for item in [project_id, project_org, project_git]]):
     return Response("Malformed POST request", status=400)
+
+  try:
+    github.get('repos/{}/{}'.format(project_org, project_git))
+  except GitHubError as e:
+    return render_template('prepare_new_config.jinja2',
+                           login=g.user.github_login,
+                           project_id=project_id,
+                           project_org=project_org,
+                           project_git=project_git,
+                           notfound='{}/{} does not exist'.format(project_org, project_git))
 
   yaml = textwrap.dedent(
     """
@@ -191,10 +221,11 @@ def edit_new():
     base_url: /obo/{idspace_lower}
 
     products:
-    - {idspace_lower}.owl: https://raw.githubusercontent.com/{org}/purl.obolibrary.org/master/config/{idspace_lower}.owl
+    - {idspace_lower}.owl: https://raw.githubusercontent.com/{org}/{git}/master/{idspace_lower}.owl
 
     term_browser: ontobee
-    """).format(idspace_upper=project_id.upper(), idspace_lower=project_id.casefold(), org=project_org)
+    """).format(idspace_upper=project_id.upper(), idspace_lower=project_id.casefold(),
+                org=project_org, git=project_git)
 
   return render_template('purl_editor.jinja2',
                          filename='{}.yml'.format(project_id.lower()),
@@ -391,16 +422,14 @@ def commit_to_branch(repo, branch, code, filename, commit_msg, file_sha=None):
 
 def create_pr(repo, branch):
   # Create a pull request:
-  moderator = app.config.get('PURL_MODERATOR')
   response = github.post('repos/{}/pulls'.format(repo),
                          data={'title': "Request to merge branch {} to master".format(branch),
-                               # NOTE: PREPEND "<login>:" TO BRANCH NAMEFOR CROSS-REPO PRs
                                'head': branch,
-                               'base': 'master',
-                               # Notify the moderator:
-                               'body': '@{}'.format(moderator)})
+                               'base': 'master'})
   if not response:
     raise Exception("Unable to create PR for branch {} in {}".format(branch, repo))
+
+  return response
 
 
 @app.route('/add_config', methods=['POST'])
@@ -417,20 +446,18 @@ def add_config():
 
   repo = '{}/purl.obolibrary.org'.format(g.user.github_login)
 
-  # TODO: Do we need to merge upstream/master into the repo before doing anything?
-
   try:
     master_sha = get_master_sha(repo)
     new_branch = create_branch(repo, filename, master_sha)
     logger.info("Created a new branch: {} in {}".format(new_branch, repo))
     commit_to_branch(repo, new_branch, code, filename, commit_msg)
     logger.info("Committed addition of {} to branch {} in {}".format(filename, new_branch, repo))
-    create_pr(repo, new_branch)
+    pr_info = create_pr(repo, new_branch)
     logger.info("Created a PR for branch {} in {}".format(new_branch, repo))
   except Exception as e:
     return Response(format(e), status=400)
 
-  return Response(status=200)
+  return jsonify({'pr_info': pr_info})
 
 
 @app.route('/update_config', methods=['POST'])
@@ -442,12 +469,25 @@ def update_config():
   filename = request.form.get('filename')
   code = request.form.get('code')
   commit_msg = request.form.get('commit_msg')
+
   if any([item is None for item in [filename, commit_msg, code]]):
     return Response("Malformed POST request", status=400)
 
-  repo = '{}/purl.obolibrary.org'.format(g.user.github_login)
+  # Get the old contents of the file:
+  old_file = github.get(
+    'repos/{}/purl.obolibrary.org/contents/config/{}'.format(g.user.github_login, filename))
+  if not old_file:
+    raise Exception("Could not get the contents of: {}".format(path))
 
-  # TODO: Do we need to merge upstream/master into the repo before doing anything?
+  decodedBytes = base64.b64decode(old_file['content'])
+  decodedStr = str(decodedBytes, "utf-8")
+
+  # Check if the old contents and the new contents are the same:
+  if decodedStr == code:
+    return Response("Update request refused: The submitted configuration is identical to the "
+                    "currently saved version.", status=422)
+
+  repo = '{}/purl.obolibrary.org'.format(g.user.github_login)
 
   try:
     file_sha = get_file_sha(repo, filename)
@@ -456,9 +496,18 @@ def update_config():
     logger.info("Created a new branch: {} in {}".format(new_branch, repo))
     commit_to_branch(repo, new_branch, code, filename, commit_msg, file_sha)
     logger.info("Committed update of {} to branch {} in {}".format(filename, new_branch, repo))
-    create_pr(repo, new_branch)
+    pr_info = create_pr(repo, new_branch)
     logger.info("Created a PR for branch {} in {}".format(new_branch, repo))
   except Exception as e:
     return Response(format(e), status=400)
 
-  return Response(status=200)
+  return jsonify({'pr_info': pr_info})
+
+
+def init_db():
+  Base.metadata.create_all(bind=engine)
+
+
+if __name__ == '__main__':
+    init_db()
+    app.run(debug=True if app.config['LOG_LEVEL'] == 'DEBUG' else False)
