@@ -8,6 +8,9 @@ from logging import DEBUG, INFO, WARNING, ERROR, CRITICAL
 LOG_LEVEL = DEBUG
 LOGGING_CONFIG = '%(asctime)-15s %(name)s %(levelname)s - %(message)s'
 
+FLASK_HOST = ''
+FLASK_PORT = 5000
+
 # The filesystem directory where purl-edtor is running from:
 PWD = os.path.dirname(os.path.realpath(__file__))
 
