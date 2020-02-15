@@ -7,7 +7,6 @@ import jsonschema
 import logging
 import os
 import re
-import textwrap
 import yaml
 
 from datetime import datetime
@@ -18,7 +17,6 @@ from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from urllib.request import urlopen
-from urllib.error import HTTPError
 
 # To run in development mode, do:
 # export FLASK_APP=server.py
@@ -30,24 +28,26 @@ from urllib.error import HTTPError
 # GITHUB_CLIENT_SECRET
 # FLASK_SECRET_KEY
 
-pwd = os.path.dirname(os.path.realpath(__file__))
-
 # Setup the webapp:
 app = Flask(__name__)
 app.config.from_object('config')
 app.secret_key = app.config['FLASK_SECRET_KEY']
 
-logging.basicConfig(format='%(asctime)-15s %(name)s %(levelname)s - %(message)s')
+# Initialize the logger:
+logging.basicConfig(format=app.config['LOGGING_CONFIG'])
 logger = logging.getLogger(__name__)
 logger.setLevel(app.config['LOG_LEVEL'])
 
-schemafile = "{}/../purl.obolibrary.org/tools/config.schema.json".format(pwd)
-schema = json.load(open(schemafile))
+# The filesystem directory where this script is running from:
+pwd = app.config['PWD']
 
-# setup github-flask
+# Load the validation schema:
+schema = json.load(open(app.config['SCHEMAFILE']))
+
+# Setup github-flask through which we'll communicate with the GitHub API:
 github = GitHub(app)
 
-# setup sqlalchemy for to run the users database
+# Setup sqlalchemy to manage the database of logged in users:
 engine = create_engine(app.config['DATABASE_URI'])
 db_session = scoped_session(sessionmaker(autocommit=False,
                                          autoflush=False,
@@ -56,16 +56,21 @@ Base = declarative_base()
 Base.query = db_session.query_property()
 
 
-# Ontology metadata:
+# Retrieve the ontology metadata:
 try:
   ontology_md = urlopen(app.config['ONTOLOGY_METADATA_URL'])
   if ontology_md.getcode() == 200:
     ontology_md = yaml.load(ontology_md.read(), Loader=yaml.SafeLoader)['ontologies']
-except HTTPError as e:
+except Exception as e:
+  logger.error("Could not retrieve ontology metadata: {}".format(e))
   ontology_md = {}
 
-# The users database table which holds information for users that have been authenticated
+
 class User(Base):
+  """
+  Saved information for users that have been authenticated to the purl-editor. Note that this table
+  preserves historical data (user records are not deleted when a user logs out)
+  """
   __tablename__ = 'users'
 
   id = Column(Integer, primary_key=True)
@@ -76,8 +81,15 @@ class User(Base):
   def __init__(self, github_access_token):
     self.github_access_token = github_access_token
 
+
 @app.before_request
 def before_request():
+  """
+  Called at the beginning of every request to set the global application context.
+  """
+  # Reset the user information that is saved in the global context. If the session
+  # already contains user information, use that to populate the global context, otherwise
+  # leave it unset.
   g.user = None
   if 'user_id' in session:
     g.user = User.query.get(session['user_id'])
@@ -85,12 +97,20 @@ def before_request():
 
 @app.after_request
 def after_request(response):
+  """
+  Called at the end of every request.
+  """
+  # Clean up the database session:
   db_session.remove()
   return response
 
 
 @github.access_token_getter
 def token_getter():
+  """
+  Called automatically by github_flask to retrieve the token for the user belonging to
+  the global application context.
+  """
   user = g.user
   if user is not None:
     return user.github_access_token
@@ -99,43 +119,61 @@ def token_getter():
 @app.route('/github_callback')
 @github.authorized_handler
 def authorized(access_token):
+  """
+  After the user is authenticated in GitHub, GitHub will redirect to this route, and the
+  purl-editor authentication will be finalised on the server.
+  """
   next_url = request.args.get('next') or url_for('index')
 
   if access_token is None:
+    logger.warn("No access token received. Redirecting to {}".format(next_url))
     return redirect(next_url)
 
   # If this check fails then there may have been an attempted CSRF attack:
   if request.args.get('state') != app.config['GITHUB_OAUTH_STATE']:
+    logger.warn("Received unexpected request state; possible CSRF attack")
     return redirect(next_url)
 
+  # Check to see if we already have the user corresponding to this access token in the db, and add
+  # her if we don't:
   user = User.query.filter_by(github_access_token=access_token).first()
   if user is None:
     user = User(access_token)
     db_session.add(user)
 
-  user.github_access_token = access_token
-
+  # Add the user to the global application context:
   g.user = user
+
+  # Get some other useful information about the user:
   github_user = github.get('/user')
-  user.github_id = github_user['id']
-  user.github_login = github_user['login']
+  g.user.github_id = github_user['id']
+  g.user.github_login = github_user['login']
 
   db_session.commit()
 
+  # Add the user's id to the session and then redirect to the requested URL:
   session['user_id'] = user.id
   return redirect(next_url)
 
 
 @app.route('/login')
 def login():
-  if session.get('user_id', None) is None:
-    return github.authorize(scope='repo', state=app.config.get('GITHUB_OAUTH_STATE'))
-  else:
-    return redirect(url_for("index"))
+  """
+  Authenticate a user
+  """
+  # If the session already contains a user id, just get rid of it and re-authenticate. This could
+  # happen, for example, if the users db gets deleted but the user's browser session still has
+  # the user's id in it.
+  if session.get('user_id') is not None:
+    session.pop('user_id')
+  return github.authorize(scope='repo', state=app.config.get('GITHUB_OAUTH_STATE'))
 
 
 @app.route('/logged_out')
 def logged_out():
+  """
+  Displays the page to be shown to logged out users.
+  """
   return render_template('logged_out.jinja2')
 
 
@@ -145,6 +183,7 @@ def verify_logged_in(fn):
   """
   @functools.wraps(fn)
   def wrapped(*args, **kwargs):
+    # If the user is not logged in, then redirect him to the "logged out" page:
     if not g.user:
       return redirect(url_for("logged_out"))
     return fn(*args, **kwargs)
@@ -154,8 +193,13 @@ def verify_logged_in(fn):
 @app.route('/logout')
 @verify_logged_in
 def logout():
+  """
+  De-authenticate the user
+  """
+  # Simply pop the user id from the session cookie, which will be enough to signal to the server
+  # that the user is not authenticated.
   session.pop('user_id', None)
-  return redirect(url_for('index'))
+  return redirect(url_for('logged_out'))
 
 
 @app.route('/')
@@ -164,22 +208,25 @@ def index():
   """
   Renders the index page of the application
   """
-  # TODO: We will not be using forked repos.
-  configs = github.get('repos/{}/purl.obolibrary.org/contents/config'.format(g.user.github_login))
-  if not configs:
+  # Get all of the available config files to edit:
+  full_configs = github.get('repos/{}/{}/contents/config'
+                            .format(app.config['GITHUB_ORG'], app.config['GITHUB_REPO']))
+  if not full_configs:
     raise Exception("Could not get contents of the config directory")
 
-  processed_configs = []
-  for config in configs:
-    config_id = config['name'].casefold().replace(".yml", "")
+  # Add the title for each config to the records that will be rendered. The title is found in the
+  # ontology metadata.
+  configs = []
+  for full_config in full_configs:
+    config_id = full_config['name'].casefold().replace(".yml", "")
+    # We skip the OBO idspace:
     if config_id != "obo":
       config_title = [o['title'] for o in ontology_md if o['id'] == config_id]
       config_title = config_title.pop() if config_title else ""
-      processed_configs.append({'name': config['name'],
-                                'path': config['path'],
-                                'title': config_title})
+      configs.append(
+        {'name': full_config['name'], 'path': full_config['path'], 'title': config_title})
 
-  return render_template('index.jinja2', configs=processed_configs, login=g.user.github_login)
+  return render_template('index.jinja2', configs=configs, login=g.user.github_login)
 
 
 @app.route('/<path:path>')
@@ -195,37 +242,34 @@ def send_editor_page(path):
 @verify_logged_in
 def edit_new():
   """
-  INSERT DOC HERE
+  Handles a POST request to start an editing session for a new configuration file. The parameters
+  expected in the POST body are:
+  projectId: the ID associated with the new project configuration (e.g. 'AGRO')
+  githubOrg: the github organisation for the project
+  githubRepo: the github repository within the github organisation.
   """
   project_id = request.form.get('projectId')
-  project_org = request.form.get('projectOrg')
-  project_git = request.form.get('projectGit')
-  if any([item is None for item in [project_id, project_org, project_git]]):
+  github_org = request.form.get('githubOrg')
+  github_repo = request.form.get('githubRepo')
+  if any([item is None for item in [project_id, github_org, github_repo]]):
     return Response("Malformed POST request", status=400)
 
+  # Make sure that the requested github organisation/repository combination actually exists:
   try:
-    github.get('repos/{}/{}'.format(project_org, project_git))
+    github.get('repos/{}/{}'.format(github_org, github_repo))
   except GitHubError as e:
     return render_template('prepare_new_config.jinja2',
                            login=g.user.github_login,
                            project_id=project_id,
-                           project_org=project_org,
-                           project_git=project_git,
-                           notfound='{}/{} does not exist'.format(project_org, project_git))
+                           github_org=github_org,
+                           github_repo=github_repo,
+                           notfound='{}/{} does not exist'.format(github_org, github_repo))
 
-  yaml = textwrap.dedent(
-    """
-    # PURL configuration for http://purl.obolibrary.org/obo/{idspace_lower}
-
-    idspace: {idspace_upper}
-    base_url: /obo/{idspace_lower}
-
-    products:
-    - {idspace_lower}.owl: https://raw.githubusercontent.com/{org}/{git}/master/{idspace_lower}.owl
-
-    term_browser: ontobee
-    """).format(idspace_upper=project_id.upper(), idspace_lower=project_id.casefold(),
-                org=project_org, git=project_git)
+  # Generate some text to populate the editor initially with, based on the new project template, and
+  # then inject it into the jinja2 template for the purl-editor:
+  yaml = app.config['NEW_PROJECT_TEMPLATE'].format(
+    idspace_upper=project_id.upper(), idspace_lower=project_id.casefold(),
+    org=github_org, git=github_repo)
 
   return render_template('purl_editor.jinja2',
                          filename='{}.yml'.format(project_id.lower()),
@@ -237,6 +281,11 @@ def edit_new():
 @app.route('/prepare_new', methods=['GET'])
 @verify_logged_in
 def prepare_new():
+  """
+  Handles a request to add a prepare project configuration. This is the first step in a two-step
+  process. This endpoint generates a form to request information about the new project from the
+  user. Once the form is submitted a request is sent to begin editing the new config.
+  """
   return render_template('prepare_new_config.jinja2', login=g.user.github_login)
 
 
@@ -244,11 +293,11 @@ def prepare_new():
 @verify_logged_in
 def edit_config(path):
   """
-  Gets the contents of the given path from the purl.obolibrary.org repository and renders it in the
-  editor using a html template file.
+  Get the contents of the given path from the github repository and render it in the
+  editor using the jinja2 template for the purl-editor
   """
   config_file = github.get(
-    'repos/{}/purl.obolibrary.org/contents/{}'.format(g.user.github_login, path))
+    'repos/{}/{}/contents/{}'.format(app.config['GITHUB_ORG'], app.config['GITHUB_REPO'], path))
   if not config_file:
     raise Exception("Could not get the contents of: {}".format(path))
 
@@ -367,7 +416,7 @@ def validate():
 
 def get_file_sha(repo, filename):
   """
-  Get the sha of the file that you will be committing
+  Get the sha of the given filename from the given github repository
   """
   response = github.get('repos/{}/contents/config/{}'.format(repo, filename))
   if not response or 'sha' not in response:
@@ -378,7 +427,7 @@ def get_file_sha(repo, filename):
 
 def get_master_sha(repo):
   """
-  Get the sha for the master branch's HEAD
+  Get the sha for the HEAD of the master branch in the given github repository
   """
   response = github.get('repos/{}/git/ref/heads/master'.format(repo))
   if not response or 'object' not in response or 'sha' not in response['object']:
@@ -388,8 +437,10 @@ def get_master_sha(repo):
 
 def create_branch(repo, filename, master_sha):
   """
-  Create a new branch from master
+  Create a new branch, from master (identified by its sha), based on the given filename
+  in the given repository.
   """
+  # Generate the branch name:
   branch = "{login}_{idspace}_{utc}".format(
     login=g.user.github_login,
     idspace=filename.replace(".yml", "").upper(),
@@ -405,7 +456,9 @@ def create_branch(repo, filename, master_sha):
 
 def commit_to_branch(repo, branch, code, filename, commit_msg, file_sha=None):
   """
-  Commit the code to the branch in the repo
+  Commit the given code to the given branch in the given repo, using the given commit message.
+  If the optional file_sha parameter is specified (because this commit is for an existing file)
+  then include it in the request to github.
   """
   data = {'message': commit_msg,
           'content': base64.b64encode(code.encode("utf-8")).decode(),
@@ -421,7 +474,9 @@ def commit_to_branch(repo, branch, code, filename, commit_msg, file_sha=None):
 
 
 def create_pr(repo, branch):
-  # Create a pull request:
+  """
+  Create a pull request for the given branch in the given repository in github
+  """
   response = github.post('repos/{}/pulls'.format(repo),
                          data={'title': "Request to merge branch {} to master".format(branch),
                                'head': branch,
@@ -444,7 +499,7 @@ def add_config():
   if any([item is None for item in [filename, commit_msg, code]]):
     return Response("Malformed POST request", status=400)
 
-  repo = '{}/purl.obolibrary.org'.format(g.user.github_login)
+  repo = '{}/{}'.format(app.config['GITHUB_ORG'], app.config['GITHUB_REPO'])
 
   try:
     master_sha = get_master_sha(repo)
@@ -457,6 +512,8 @@ def add_config():
   except Exception as e:
     return Response(format(e), status=400)
 
+  # We return github's response to the caller, which contains info on the PR (among other things,
+  # a URL to use to access it):
   return jsonify({'pr_info': pr_info})
 
 
@@ -473,21 +530,22 @@ def update_config():
   if any([item is None for item in [filename, commit_msg, code]]):
     return Response("Malformed POST request", status=400)
 
-  # Get the old contents of the file:
-  old_file = github.get(
-    'repos/{}/purl.obolibrary.org/contents/config/{}'.format(g.user.github_login, filename))
-  if not old_file:
+  # Get the contents of the current version of the file:
+  curr_contents = github.get('repos/{}/{}/contents/config/{}'
+                             .format(app.config['GITHUB_ORG'], app.config['GITHUB_REPO'], filename))
+  if not curr_contents:
     raise Exception("Could not get the contents of: {}".format(path))
 
-  decodedBytes = base64.b64decode(old_file['content'])
+  decodedBytes = base64.b64decode(curr_contents['content'])
   decodedStr = str(decodedBytes, "utf-8")
 
-  # Check if the old contents and the new contents are the same:
+  # Verify that the contents to be committed differ from the current contents, return a 422
+  # if they are the same:
   if decodedStr == code:
     return Response("Update request refused: The submitted configuration is identical to the "
                     "currently saved version.", status=422)
 
-  repo = '{}/purl.obolibrary.org'.format(g.user.github_login)
+  repo = '{}/{}'.format(app.config['GITHUB_ORG'], app.config['GITHUB_REPO'])
 
   try:
     file_sha = get_file_sha(repo, filename)
@@ -501,13 +559,21 @@ def update_config():
   except Exception as e:
     return Response(format(e), status=400)
 
+  # We return github's response to the caller, which contains info on the PR (among other things,
+  # a URL to use to access it):
   return jsonify({'pr_info': pr_info})
 
 
 def init_db():
+  """
+  Initialise the users database
+  """
   Base.metadata.create_all(bind=engine)
 
 
+# Call the function initialising the users db:
+init_db()
+
+
 if __name__ == '__main__':
-    init_db()
     app.run(debug=True if app.config['LOG_LEVEL'] == 'DEBUG' else False)

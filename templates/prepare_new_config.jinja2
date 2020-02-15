@@ -2,11 +2,15 @@
 <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
 <meta content="utf-8" http-equiv="encoding">
 
+<link href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
+      rel="stylesheet" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh"
+      crossorigin="anonymous"/>
+
+<link rel="stylesheet" href="/purl_editor.css"/>
+
 {% set appname = "OBO PURL YAML Code Editor" %}
 
 <title>{{ appname }}</title>
-
-{% include 'includes.jinja2' %}
 
 <div class="container-fluid">
 
@@ -45,18 +49,18 @@
                required>
       </div>
       <div class="form-group">
-        <label for="projectOrg">GitHub organization/username</label>
-        <input type="text" class="form-control" name="projectOrg" id="projectOrg"
-               {% if project_org is defined %}
-                 value="{{ project_org }}"
+        <label for="githubOrg">GitHub organization/username</label>
+        <input type="text" class="form-control" name="githubOrg" id="githubOrg"
+               {% if github_org is defined %}
+                 value="{{ github_org }}"
                {% endif %}
                required>
       </div>
       <div class="form-group">
-        <label for="projectOrg">GitHub project</label>
-        <input type="text" class="form-control" name="projectGit" id="projectGit"
-               {% if project_git is defined %}
-                 value="{{ project_git }}"
+        <label for="githubOrg">GitHub project</label>
+        <input type="text" class="form-control" name="githubRepo" id="githubRepo"
+               {% if github_repo is defined %}
+                 value="{{ github_repo }}"
                {% endif %}
                required>
       </div>

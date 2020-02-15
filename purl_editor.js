@@ -1,5 +1,6 @@
 /**
- * ADD DOC HERE
+ * Gets the document element corresponding to the "commit" button. This will be variable depending
+ * on whether the editor is being used to update an existing or add a new config file.
  */
 var get_commit_btn = function() {
   if (document.getElementById("update-btn")) {
@@ -12,7 +13,7 @@ var get_commit_btn = function() {
 
 
 /**
- * Initialize the editor instance if the element with the id "code" exists:
+ * Initialize the editor instance if the element with the id "code" exists.
  */
 var editor;
 if (document.getElementById("code")) {
@@ -49,6 +50,7 @@ if (document.getElementById("code")) {
       },
     }
   });
+
 
   /**
    * Add our custom hinting function to the editor
@@ -94,6 +96,7 @@ if (document.getElementById("code")) {
     return "Do you really want to leave this page? Your edits will not be saved.";
   }
 }
+
 
 /**
  * Generates completion hints depending on the current cursor position of the yaml file
@@ -315,7 +318,7 @@ var validate = function(filename) {
 
 
 /**
- * ADD DOC HERE
+ * Submit a pull request to github to add a new configuration to the repository.
  */
 var add_config = function(filename) {
   // Get a confirmation from the user:
@@ -354,8 +357,9 @@ var add_config = function(filename) {
         statusArea.style.color = "#000000";
         statusArea.innerHTML = "Submitting new configuration ...";
 
-        // Embed the code into a POST request and send it to the server for processing.
+        // Embed the code into a request.
         var request = new XMLHttpRequest();
+        // Define a function to handle a state change of the request:
         request.onreadystatechange = function() {
           $("*").css("cursor", "default");
           if (request.readyState === 4) {
@@ -383,6 +387,7 @@ var add_config = function(filename) {
             }
           }
         }
+        // Post the request to the server.
         request.open('POST', '/add_config', true);
         request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
         request.send('filename=' + filename +
@@ -396,7 +401,7 @@ var add_config = function(filename) {
 
 
 /**
- * Update the config file on git'ub
+ * Submit a pull request to github to update the given configuration file in the repository.
  */
 var update_config = function(filename) {
   // Get a confirmation from the user:
@@ -435,8 +440,9 @@ var update_config = function(filename) {
         statusArea.style.color = "#000000";
         statusArea.innerHTML = "Submitting update ...";
 
-        // Embed the code into a POST request and send it to the server for processing.
+        // Embed the code into a request.
         var request = new XMLHttpRequest();
+        // Define a function to handle a state change of the request:
         request.onreadystatechange = function() {
           $("*").css("cursor", "default");
           if (request.readyState === 4) {
@@ -464,6 +470,7 @@ var update_config = function(filename) {
             }
           }
         }
+        // Post the request to the server.
         request.open('POST', '/update_config', true);
         request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
         request.send('filename=' + filename +
