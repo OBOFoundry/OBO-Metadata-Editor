@@ -13,7 +13,6 @@ from datetime import datetime
 from flask import Flask, jsonify, render_template, request, Response, g, send_from_directory, \
   session, redirect, url_for
 from flask_github import GitHub, GitHubError
-from gevent.pywsgi import WSGIServer
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
@@ -577,5 +576,5 @@ init_db()
 
 
 if __name__ == '__main__':
-  http_server = WSGIServer((app.config['FLASK_HOST'], app.config['FLASK_PORT']), app)
-  http_server.serve_forever()
+  app.run(host=app.config['FLASK_HOST'], port=app.config['FLASK_PORT'],
+          debug=True if app.config['LOG_LEVEL'] == 'DEBUG' else False)
