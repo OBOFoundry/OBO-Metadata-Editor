@@ -5,7 +5,6 @@ import functools
 import json
 import jsonschema
 import logging
-import os
 import re
 import yaml
 
@@ -257,7 +256,7 @@ def edit_new():
   # Make sure that the requested github organisation/repository combination actually exists:
   try:
     github.get('repos/{}/{}'.format(github_org, github_repo))
-  except GitHubError as e:
+  except GitHubError:
     return render_template('prepare_new_config.jinja2',
                            login=g.user.github_login,
                            project_id=project_id,
@@ -534,7 +533,7 @@ def update_config():
   curr_contents = github.get('repos/{}/{}/contents/config/{}'
                              .format(app.config['GITHUB_ORG'], app.config['GITHUB_REPO'], filename))
   if not curr_contents:
-    raise Exception("Could not get the contents of: {}".format(path))
+    raise Exception("Could not get the contents of: {}".format(filename))
 
   decodedBytes = base64.b64decode(curr_contents['content'])
   decodedStr = str(decodedBytes, "utf-8")
