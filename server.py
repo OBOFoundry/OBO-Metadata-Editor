@@ -165,7 +165,7 @@ def login():
   # the user's id in it.
   if session.get('user_id') is not None:
     session.pop('user_id')
-  return github.authorize(scope='repo', state=app.config.get('GITHUB_OAUTH_STATE'))
+  return github.authorize(scope='public_repo', state=app.config.get('GITHUB_OAUTH_STATE'))
 
 
 @app.route('/logged_out')
