@@ -11,6 +11,15 @@ var get_commit_btn = function() {
   }
 }
 
+/**
+ * Shows or hides an element of text when a link is clicked
+ */
+function showHideText(elemToShow, elemToHide) {
+    // show this element
+    document.getElementById(elemToShow).style.display = 'block';
+    // hide this element
+    document.getElementById(elemToHide).style.display = 'none';
+}
 
 /**
  * Initialize the editor instance if the element with the id "code" exists.
@@ -285,12 +294,16 @@ var validate = function(filename) {
         var response = JSON.parse(request.responseText);
         alertText = "Validation failed";
         alertText += response.line_number >= 0 ? (". At line " + response.line_number + ": ") : ": ";
-        alertText += response.summary + "\n\n" + "Details:\n---\n" + response.details;
-
+        alertText += response.summary + "\n";
         alertText = alertText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        alertText += '<a href="" id="showDetailsLink" onclick="showHideText(\'details\',\'showDetailsLink\');return false">Show Details</a> ';
         alertText = '<div class="preformatted">' + alertText + '</div>';
+        alertTextDetail = response.details + '\n';
+        alertTextDetail = alertTextDetail.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        alertTextDetail += '<a href="" id="hideDetailsLink" onclick="showHideText(\'showDetailsLink\',\'details\');return false">Hide Details</a> '
+        alertTextDetail = '<div id="details" class="preformatted" style="display:none">' + alertTextDetail + '</div>';
         statusArea.style.color = "#FF0000";
-        statusArea.innerHTML = alertText;
+        statusArea.innerHTML = alertText + '\n' + alertTextDetail;
         get_commit_btn().disabled = true;
         // If the line number is valid, then add it to the message and highlight that line in the
         // editor while scrolling it into view.
