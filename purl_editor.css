@@ -37,11 +37,8 @@ button:disabled {
 }
 
 #status-area {
-    margin-top: 2em;
     width: 100%;
     height: auto;
-    background-color: #F5F5F5;
-    border: 4px groove;
     padding: 1em;
 }
 

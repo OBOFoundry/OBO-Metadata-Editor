@@ -11,6 +11,41 @@ var get_commit_btn = function() {
   }
 }
 
+/**
+ * Shows or hides an element of text when a link is clicked
+ */
+function showHideText(elemToShow, elemToHide) {
+    // show this element
+    document.getElementById(elemToShow).style.display = 'inherit';
+    // hide this element
+    document.getElementById(elemToHide).style.display = 'none';
+}
+
+/**
+ * Formats a String message as a dismissable Bootstrap alert text.
+ * For example, passing parameter style = alert-danger gives a red box.
+ */
+function getAlertFor(text, style, extraText='') {
+    if ( extraText.length > 0) {
+        extraText = '<a href="" id="hideDetailsLink" class="alert-link" \
+                onclick="showHideText(\'showDetailsLink\',\'details\');return false;"> \
+                Hide Details</a> '+extraText ;
+        extraText = '<div id="details" style="display:none">' + extraText + '</div>';
+    }
+
+    var returnText = '<div id="alert-msg" class="alert '+style+' alert-dismissable fade show" \
+        role="alert">'
+        + text
+        + '<button type="button" class="close" data-dismiss="alert" aria-label="Close"> \
+        <span aria-hidden="true">&times;</span></button> '
+        + ( (extraText.length > 0) ? ' <hr> <a href="" id="showDetailsLink" class="alert-link" \
+            onclick="showHideText(\'details\',\'showDetailsLink\');return false;"> \
+            Show Details</a> ' : '' )
+        + extraText
+        +'</div>';
+
+    return returnText;
+}
 
 /**
  * Initialize the editor instance if the element with the id "code" exists.
@@ -242,23 +277,20 @@ var validate = function(filename) {
 
   // Clear the status area:
   var statusArea = document.getElementById("status-area");
-  statusArea.style.color = "#000000";
-  statusArea.innerHTML = "Validating ...";
+  statusArea.innerHTML = getAlertFor("Validating ...", "alert-info") ;
 
   // Before doing anything else, make sure that the idspace indicated in the code matches the
   // idspace being edited:
   var expected_idspace = filename.toUpperCase().replace(".YML", "");
-  var actual_idspace = code.match(/\n[^\S\r\n]*idspace:[^\S\r\n]+(.+?)[^\S\r\n]*\n/);
+  var actual_idspace = code.match(/[^\S\r\n]*idspace:[^\S\r\n]+(.+?)[^\S\r\n]*\n/m);
   if (!actual_idspace) {
-    statusArea.style.color = "#FF0000";
-    statusArea.innerHTML = "'idspace:' is required"
+    statusArea.innerHTML = getAlertFor("Validation failed: \'idspace: \' is required", "alert-danger") ;
     get_commit_btn().disabled = true;
     return;
   }
   else if (actual_idspace[1] !== expected_idspace) {
-    statusArea.style.color = "#FF0000";
-    statusArea.innerHTML = "idspace: '" + actual_idspace[1] +
-      "' does not match expected idspace: '" + expected_idspace + "'";
+    statusArea.innerHTML = getAlertFor("Validation failed: \'idspace: " + actual_idspace[1] +
+      "\' does not match expected idspace: \'" + expected_idspace + "\'", "alert-danger")  ;
     get_commit_btn().disabled = true;
     return;
   }
@@ -270,27 +302,25 @@ var validate = function(filename) {
     $("*").css("cursor", "default");
     if (request.readyState === 4) {
       if (!request.status) {
-        statusArea.style.color = "#FF0000";
-        statusArea.innerHTML = "Problem communicating with server";
+        statusArea.innerHTML = getAlertFor("Problem communicating with server","alert-danger");
         get_commit_btn().disabled = true;
       }
       else if (request.status === 200) {
-        statusArea.style.color = "#00CD00";
-        statusArea.innerHTML = "Validation successful";
+        statusArea.innerHTML = getAlertFor("Validation successful", "alert-success") ;
         get_commit_btn().disabled = false;
       }
       else {
         // Display the error message in the status area. Note that we must replace any angle
         // angle brackets with HTML escape codes.
         var response = JSON.parse(request.responseText);
-        alertText = "Validation failed";
-        alertText += response.line_number >= 0 ? (". At line " + response.line_number + ": ") : ": ";
-        alertText += response.summary + "\n\n" + "Details:\n---\n" + response.details;
-
+        alertText = 'Validation failed';
+        alertText += response.line_number >= 0 ? ('. At line ' + response.line_number + ': ') : ': ';
+        alertText += response.summary + '\n';
         alertText = alertText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        alertText = '<div class="preformatted">' + alertText + '</div>';
-        statusArea.style.color = "#FF0000";
-        statusArea.innerHTML = alertText;
+        alertTextDetail = response.details + '\n';
+        alertTextDetail = alertTextDetail.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        alertTextDetail = '<div class="preformatted">'+alertTextDetail+'</div>';
+        statusArea.innerHTML = getAlertFor(alertText,"alert-danger",alertTextDetail);
         get_commit_btn().disabled = true;
         // If the line number is valid, then add it to the message and highlight that line in the
         // editor while scrolling it into view.
