@@ -6,43 +6,68 @@
       rel="stylesheet" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh"
       crossorigin="anonymous"/>
 
+<script src="https://kit.fontawesome.com/f2901ed411.js" crossorigin="anonymous"></script>
+
 <link rel="stylesheet" href="/purl_editor.css"/>
 
-{% set appname = "OBO PURL YAML Code Editor" %}
+{% set appname = "OBO Metadata Editor" %}
 
 <title>{{ appname }}</title>
 
-<div class="container-fluid">
+<div class="content">
 
-  <h2><a href="/">{{ appname }}</a></h2>
+    <h1><a href="/" class="text-dark">{{ appname }}</a></h1>
 
-  {% if login is not none %}
-    <div>
-      You are logged in as <strong>{{ login }}</strong>.
-      Click <a href="/logout">here</a> to logout
+    {% if login is not none %}
+        <div>
+        You are logged in as <strong>{{ login }}</strong>.
+        Click <a href="/logout">here</a> to logout
+        </div>
+    {% endif %}
+
+    <hr/>
+
+
+    <div class="alert alert-info" role="alert">
+        <p>This OBO Metadata Editor is a tool for editing the metadata associated with OBO Foundry ontologies.</p>
+
+        <p>The PURL configuration for each ontology is specified in a YAML configuration file.</p>
+
+        <p>Choose one of the project configurations below to edit, or
+        <a href="/prepare_new" class="alert-link">add a new project configuration</a>.</p>
     </div>
-  {% endif %}
 
-  <hr/>
-</div>
+    <div class="col-md-12">
+        <div class="row">
+            <div class="col-md-12">
+            <table class="table small">
+                <tbody>
+                {% for cfg in configs | sort(attribute='name') %}
+                    <tr>
+                    <td>
+                        <a href="{{cfg.url}}">{{ cfg.name | replace(".yml", "")}}</a>
+                    </td>
+                    <td>
+                        {{ cfg.title }}
+                    </td>
+                    <td>
+                        {{ cfg.description }}
+                    </td>
+                    <td style="min-width:100px">
+                        <a href="/edit/{{ cfg.path }}">
+                            <button type="button" class="btn btn-light border border-secondary" aria-label="Left Align" title="Edit PURL config">
+                            <span class="small" style="white-space: nowrap;">
+                            <i class="fas fa-pencil-alt"></i>
+                            Edit PURL</span>
+                            </button>
+                        </a>
+                    </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+    </div>
 
-<div class="col-sm-6">
-  <table class="table table-striped table-bordered">
-    <caption>
-      Choose one of the project configurations below to edit, or
-      <a href="/prepare_new">add a new project configuration</a>.
-    </caption>
-    <tbody>
-      {% for cfg in configs | sort(attribute='name') %}
-        <tr>
-          <td>
-            <a href="/edit/{{ cfg.path }}">{{ cfg.name | replace(".yml", "") | upper }}</a>
-          </td>
-          <td>
-            {{ cfg.title }}
-          </td>
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
 </div>
