@@ -20,6 +20,7 @@ from urllib.request import urlopen
 # To run in development mode, do:
 # export FLASK_APP=server.py
 # export FLASK_DEBUG=1 (optional)
+# export FLASK_ENV=development (optional)
 # python3 -m flask run
 
 # Note that the following environment variables must be set:
@@ -33,9 +34,11 @@ app.config.from_object('config')
 app.secret_key = app.config['FLASK_SECRET_KEY']
 
 # Initialize the logger:
-logging.basicConfig(format=app.config['LOGGING_CONFIG'])
-logger = logging.getLogger(__name__)
-logger.setLevel(app.config['LOG_LEVEL'])
+logging.basicConfig(format=app.config['LOGGING_CONFIG'], level=app.config['LOG_LEVEL'])
+streamHandler = logging.StreamHandler()
+streamHandler.setLevel(logging.DEBUG)
+app.logger.addHandler(streamHandler)
+app.logger.debug("TESTING: Logging is set up.")
 
 # The filesystem directory where this script is running from:
 pwd = app.config['PWD']
@@ -61,7 +64,7 @@ try:
   if ontology_md.getcode() == 200:
     ontology_md = yaml.load(ontology_md.read(), Loader=yaml.SafeLoader)['ontologies']
 except Exception as e:
-  logger.error("Could not retrieve ontology metadata: {}".format(e))
+  app.logger.error("Could not retrieve ontology metadata: {}".format(e))
   ontology_md = {}
 
 
@@ -125,12 +128,12 @@ def authorized(access_token):
   next_url = request.args.get('next') or url_for('index')
 
   if access_token is None:
-    logger.warn("No access token received. Redirecting to {}".format(next_url))
+    app.logger.warn("No access token received. Redirecting to {}".format(next_url))
     return redirect(next_url)
 
   # If this check fails then there may have been an attempted CSRF attack:
   if request.args.get('state') != app.config['GITHUB_OAUTH_STATE']:
-    logger.warn("Received unexpected request state; possible CSRF attack")
+    app.logger.warn("Received unexpected request state; possible CSRF attack")
     return redirect(next_url)
 
   # Check to see if we already have the user corresponding to this access token in the db, and add
@@ -222,8 +225,13 @@ def index():
     if config_id != "obo":
       config_title = [o['title'] for o in ontology_md if o['id'] == config_id]
       config_title = config_title.pop() if config_title else ""
+      config_url = [o['ontology_purl'] for o in ontology_md if o['id'] == config_id and 'ontology_purl' in o]
+      config_url = config_url.pop() if config_url else ""
+      config_description = [o['description'] for o in ontology_md if o['id'] == config_id and 'description' in o]
+      config_description = config_description.pop() if config_description else ""
       configs.append(
-        {'name': full_config['name'], 'path': full_config['path'], 'title': config_title})
+        {'name': full_config['name'], 'path': full_config['path'], 'title': config_title,
+         'url': config_url, 'description': config_description})
 
   return render_template('index.jinja2', configs=configs, login=g.user.github_login)
 
@@ -329,7 +337,7 @@ def validate():
     - item 2
     - etc.)
     """
-    logger.debug("Searching from line {line} for{item}block: '{block}'"
+    app.logger.debug("Searching from line {line} for{item}block: '{block}'"
                  .format(line=start + 1,
                          item=' item #{} of '.format(item + 1) if item >= 0 else ' ',
                          block=block_label))
@@ -348,7 +356,7 @@ def validate():
       if matched:
         block_start_found = True
         start = start + i
-        logger.debug("Found the start of the block: '{}' at line {}".format(line, start + 1))
+        app.logger.debug("Found the start of the block: '{}' at line {}".format(line, start + 1))
         # If we have not been instructed to search for an item within the block, then we are done:
         if item < 0:
           return start
@@ -363,7 +371,7 @@ def validate():
 
         # Only consider items that fall directly under this block:
         if item_indent_level == indent_level:
-          logger.debug("Found item #{} of block: '{}' at line {}. Line is: '{}'"
+          app.logger.debug("Found item #{} of block: '{}' at line {}. Line is: '{}'"
                        .format(curr_item + 1, block_label, start + i + 1, line))
           # If we have found the nth item, return the line on which it starts:
           if curr_item == item:
@@ -371,7 +379,7 @@ def validate():
           # Otherwise continue looping:
           curr_item += 1
 
-    logger.debug("*** Something went wrong while trying to find the line number ***")
+    app.logger.debug("*** Something went wrong while trying to find the line number ***")
     return start
 
   if request.form.get('code') is None:
@@ -388,7 +396,7 @@ def validate():
             400)
   except jsonschema.exceptions.ValidationError as err:
     error_summary = err.schema.get('description') or err.message
-    logger.debug("Determining line number for error: {}".format(list(err.absolute_path)))
+    app.logger.debug("Determining line number for error: {}".format(list(err.absolute_path)))
     start = 0
     if not err.absolute_path:
       return (jsonify({'summary': format(error_summary),
@@ -400,10 +408,10 @@ def validate():
         if type(component) is str:
           block_label = component
           start = get_error_start(code, start, block_label)
-          logger.debug("Error begins at line {}".format(start + 1))
+          app.logger.debug("Error begins at line {}".format(start + 1))
         elif type(component) is int:
           start = get_error_start(code, start, block_label, component)
-          logger.debug("Error begins at line {}".format(start + 1))
+          app.logger.debug("Error begins at line {}".format(start + 1))
 
     return (jsonify({'summary': format(error_summary),
                      'line_number': start + 1,
@@ -503,11 +511,11 @@ def add_config():
   try:
     master_sha = get_master_sha(repo)
     new_branch = create_branch(repo, filename, master_sha)
-    logger.info("Created a new branch: {} in {}".format(new_branch, repo))
+    app.logger.info("Created a new branch: {} in {}".format(new_branch, repo))
     commit_to_branch(repo, new_branch, code, filename, commit_msg)
-    logger.info("Committed addition of {} to branch {} in {}".format(filename, new_branch, repo))
+    app.logger.info("Committed addition of {} to branch {} in {}".format(filename, new_branch, repo))
     pr_info = create_pr(repo, new_branch)
-    logger.info("Created a PR for branch {} in {}".format(new_branch, repo))
+    app.logger.info("Created a PR for branch {} in {}".format(new_branch, repo))
   except Exception as e:
     return Response(format(e), status=400)
 
@@ -550,11 +558,11 @@ def update_config():
     file_sha = get_file_sha(repo, filename)
     master_sha = get_master_sha(repo)
     new_branch = create_branch(repo, filename, master_sha)
-    logger.info("Created a new branch: {} in {}".format(new_branch, repo))
+    app.logger.info("Created a new branch: {} in {}".format(new_branch, repo))
     commit_to_branch(repo, new_branch, code, filename, commit_msg, file_sha)
-    logger.info("Committed update of {} to branch {} in {}".format(filename, new_branch, repo))
+    app.logger.info("Committed update of {} to branch {} in {}".format(filename, new_branch, repo))
     pr_info = create_pr(repo, new_branch)
-    logger.info("Created a PR for branch {} in {}".format(new_branch, repo))
+    app.logger.info("Created a PR for branch {} in {}".format(new_branch, repo))
   except Exception as e:
     return Response(format(e), status=400)
 
@@ -576,4 +584,5 @@ init_db()
 
 if __name__ == '__main__':
   app.run(host=app.config['FLASK_HOST'], port=app.config['FLASK_PORT'],
-          debug=True if app.config['LOG_LEVEL'] == 'DEBUG' else False)
+          debug=True)
+          #debug=True if app.config['LOG_LEVEL'] == 'DEBUG' else False)
