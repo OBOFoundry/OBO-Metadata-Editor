@@ -213,7 +213,7 @@ def index():
   if not full_configs:
     raise Exception("Could not get contents of the config directory")
 
-  # Add the title for each config to the records that will be rendered. The title is found in the
+  # Add the title, url and description for each config to the records that will be rendered. This information is found in the
   # ontology metadata.
   configs = []
   for full_config in full_configs:
@@ -222,8 +222,13 @@ def index():
     if config_id != "obo":
       config_title = [o['title'] for o in ontology_md if o['id'] == config_id]
       config_title = config_title.pop() if config_title else ""
+      config_url = [o['ontology_purl'] for o in ontology_md if o['id'] == config_id and 'ontology_purl' in o]
+      config_url = config_url.pop() if config_url else ""
+      config_description = [o['description'] for o in ontology_md if o['id'] == config_id and 'description' in o]
+      config_description = config_description.pop() if config_description else ""
       configs.append(
-        {'name': full_config['name'], 'path': full_config['path'], 'title': config_title})
+        {'name': full_config['name'], 'path': full_config['path'], 'title': config_title,
+         'url': config_url, 'description': config_description})
 
   return render_template('index.jinja2', configs=configs, login=g.user.github_login)
 
