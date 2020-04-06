@@ -20,7 +20,6 @@ from urllib.request import urlopen
 # To run in development mode, do:
 # export FLASK_APP=server.py
 # export FLASK_DEBUG=1 (optional)
-# export FLASK_ENV=development (optional)
 # python3 -m flask run
 
 # Note that the following environment variables must be set:
@@ -34,11 +33,9 @@ app.config.from_object('config')
 app.secret_key = app.config['FLASK_SECRET_KEY']
 
 # Initialize the logger:
-logging.basicConfig(format=app.config['LOGGING_CONFIG'], level=app.config['LOG_LEVEL'])
-streamHandler = logging.StreamHandler()
-streamHandler.setLevel(logging.DEBUG)
-app.logger.addHandler(streamHandler)
-app.logger.debug("TESTING: Logging is set up.")
+logging.basicConfig(format=app.config['LOGGING_CONFIG'])
+logger = logging.getLogger(__name__)
+logger.setLevel(app.config['LOG_LEVEL'])
 
 # The filesystem directory where this script is running from:
 pwd = app.config['PWD']
@@ -64,7 +61,7 @@ try:
   if ontology_md.getcode() == 200:
     ontology_md = yaml.load(ontology_md.read(), Loader=yaml.SafeLoader)['ontologies']
 except Exception as e:
-  app.logger.error("Could not retrieve ontology metadata: {}".format(e))
+  logger.error("Could not retrieve ontology metadata: {}".format(e))
   ontology_md = {}
 
 
@@ -128,12 +125,12 @@ def authorized(access_token):
   next_url = request.args.get('next') or url_for('index')
 
   if access_token is None:
-    app.logger.warn("No access token received. Redirecting to {}".format(next_url))
+    logger.warn("No access token received. Redirecting to {}".format(next_url))
     return redirect(next_url)
 
   # If this check fails then there may have been an attempted CSRF attack:
   if request.args.get('state') != app.config['GITHUB_OAUTH_STATE']:
-    app.logger.warn("Received unexpected request state; possible CSRF attack")
+    logger.warn("Received unexpected request state; possible CSRF attack")
     return redirect(next_url)
 
   # Check to see if we already have the user corresponding to this access token in the db, and add
@@ -216,7 +213,7 @@ def index():
   if not full_configs:
     raise Exception("Could not get contents of the config directory")
 
-  # Add the title for each config to the records that will be rendered. The title is found in the
+  # Add the title, url and description for each config to the records that will be rendered. This information is found in the
   # ontology metadata.
   configs = []
   for full_config in full_configs:
@@ -337,7 +334,7 @@ def validate():
     - item 2
     - etc.)
     """
-    app.logger.debug("Searching from line {line} for{item}block: '{block}'"
+    logger.debug("Searching from line {line} for{item}block: '{block}'"
                  .format(line=start + 1,
                          item=' item #{} of '.format(item + 1) if item >= 0 else ' ',
                          block=block_label))
@@ -356,7 +353,7 @@ def validate():
       if matched:
         block_start_found = True
         start = start + i
-        app.logger.debug("Found the start of the block: '{}' at line {}".format(line, start + 1))
+        logger.debug("Found the start of the block: '{}' at line {}".format(line, start + 1))
         # If we have not been instructed to search for an item within the block, then we are done:
         if item < 0:
           return start
@@ -371,7 +368,7 @@ def validate():
 
         # Only consider items that fall directly under this block:
         if item_indent_level == indent_level:
-          app.logger.debug("Found item #{} of block: '{}' at line {}. Line is: '{}'"
+          logger.debug("Found item #{} of block: '{}' at line {}. Line is: '{}'"
                        .format(curr_item + 1, block_label, start + i + 1, line))
           # If we have found the nth item, return the line on which it starts:
           if curr_item == item:
@@ -379,7 +376,7 @@ def validate():
           # Otherwise continue looping:
           curr_item += 1
 
-    app.logger.debug("*** Something went wrong while trying to find the line number ***")
+    logger.debug("*** Something went wrong while trying to find the line number ***")
     return start
 
   if request.form.get('code') is None:
@@ -396,7 +393,7 @@ def validate():
             400)
   except jsonschema.exceptions.ValidationError as err:
     error_summary = err.schema.get('description') or err.message
-    app.logger.debug("Determining line number for error: {}".format(list(err.absolute_path)))
+    logger.debug("Determining line number for error: {}".format(list(err.absolute_path)))
     start = 0
     if not err.absolute_path:
       return (jsonify({'summary': format(error_summary),
@@ -408,10 +405,10 @@ def validate():
         if type(component) is str:
           block_label = component
           start = get_error_start(code, start, block_label)
-          app.logger.debug("Error begins at line {}".format(start + 1))
+          logger.debug("Error begins at line {}".format(start + 1))
         elif type(component) is int:
           start = get_error_start(code, start, block_label, component)
-          app.logger.debug("Error begins at line {}".format(start + 1))
+          logger.debug("Error begins at line {}".format(start + 1))
 
     return (jsonify({'summary': format(error_summary),
                      'line_number': start + 1,
@@ -511,11 +508,11 @@ def add_config():
   try:
     master_sha = get_master_sha(repo)
     new_branch = create_branch(repo, filename, master_sha)
-    app.logger.info("Created a new branch: {} in {}".format(new_branch, repo))
+    logger.info("Created a new branch: {} in {}".format(new_branch, repo))
     commit_to_branch(repo, new_branch, code, filename, commit_msg)
-    app.logger.info("Committed addition of {} to branch {} in {}".format(filename, new_branch, repo))
+    logger.info("Committed addition of {} to branch {} in {}".format(filename, new_branch, repo))
     pr_info = create_pr(repo, new_branch)
-    app.logger.info("Created a PR for branch {} in {}".format(new_branch, repo))
+    logger.info("Created a PR for branch {} in {}".format(new_branch, repo))
   except Exception as e:
     return Response(format(e), status=400)
 
@@ -558,11 +555,11 @@ def update_config():
     file_sha = get_file_sha(repo, filename)
     master_sha = get_master_sha(repo)
     new_branch = create_branch(repo, filename, master_sha)
-    app.logger.info("Created a new branch: {} in {}".format(new_branch, repo))
+    logger.info("Created a new branch: {} in {}".format(new_branch, repo))
     commit_to_branch(repo, new_branch, code, filename, commit_msg, file_sha)
-    app.logger.info("Committed update of {} to branch {} in {}".format(filename, new_branch, repo))
+    logger.info("Committed update of {} to branch {} in {}".format(filename, new_branch, repo))
     pr_info = create_pr(repo, new_branch)
-    app.logger.info("Created a PR for branch {} in {}".format(new_branch, repo))
+    logger.info("Created a PR for branch {} in {}".format(new_branch, repo))
   except Exception as e:
     return Response(format(e), status=400)
 
@@ -584,5 +581,4 @@ init_db()
 
 if __name__ == '__main__':
   app.run(host=app.config['FLASK_HOST'], port=app.config['FLASK_PORT'],
-          debug=True)
-          #debug=True if app.config['LOG_LEVEL'] == 'DEBUG' else False)
+          debug=True if app.config['LOG_LEVEL'] == 'DEBUG' else False)
