@@ -37,9 +37,7 @@ button:disabled {
 }
 
 #status-area {
-    width: 100%;
-    height: auto;
-    padding: 1em;
+    padding-top: 1em;
 }
 
 h2 {
