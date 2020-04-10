@@ -78,6 +78,27 @@
   </div>
 
   <!-- Messages received when pressing the 'Validate' button are displayed in this div. -->
-  <div id="status-area"/>
+  <div id="status-area" role="alert" style="display:none" >
+    <button id="close-alert-btn" type="button" class="close" aria-label="Close">
+        <span aria-hidden="true">&times;</span>
+    </button>
+    <div id="alert-message"> <!-- For the main validation message. -->
+    </div>
 
+    <div id="details-area" style="display:none">
+        <hr/>
+        <a href="" id="showDetailsLink" class="alert-link" onclick="showHideText('details','showDetailsLink');return false;">
+            Show Details
+        </a>
+
+        <div id="details" style="display:none">
+            <a href="" id="hideDetailsLink" class="alert-link" onclick="showHideText('showDetailsLink','details');return false;">
+                Hide Details
+            </a>
+            <div id="detail-message" class="preformatted">  <!-- for the secondary message. -->
+            </div>
+        </div> <!-- details -->
+    </div> <!-- details-area -->
+  </div> <!-- status-area -->
+</div>
 </div>
