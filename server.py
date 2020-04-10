@@ -477,12 +477,12 @@ def commit_to_branch(repo, branch, code, filename, commit_msg, file_sha=None):
                     .format(filename, branch, repo))
 
 
-def create_pr(repo, branch):
+def create_pr(repo, branch, commit_msg):
   """
   Create a pull request for the given branch in the given repository in github
   """
   response = github.post('repos/{}/pulls'.format(repo),
-                         data={'title': "Request to merge branch {} to master".format(branch),
+                         data={'title': commit_msg,
                                'head': branch,
                                'base': 'master'})
   if not response:
@@ -511,7 +511,7 @@ def add_config():
     logger.info("Created a new branch: {} in {}".format(new_branch, repo))
     commit_to_branch(repo, new_branch, code, filename, commit_msg)
     logger.info("Committed addition of {} to branch {} in {}".format(filename, new_branch, repo))
-    pr_info = create_pr(repo, new_branch)
+    pr_info = create_pr(repo, new_branch, commit_msg)
     logger.info("Created a PR for branch {} in {}".format(new_branch, repo))
   except Exception as e:
     return Response(format(e), status=400)
@@ -558,7 +558,7 @@ def update_config():
     logger.info("Created a new branch: {} in {}".format(new_branch, repo))
     commit_to_branch(repo, new_branch, code, filename, commit_msg, file_sha)
     logger.info("Committed update of {} to branch {} in {}".format(filename, new_branch, repo))
-    pr_info = create_pr(repo, new_branch)
+    pr_info = create_pr(repo, new_branch, commit_msg)
     logger.info("Created a PR for branch {} in {}".format(new_branch, repo))
   except Exception as e:
     return Response(format(e), status=400)
