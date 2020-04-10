@@ -40,7 +40,7 @@
                 {% for cfg in configs | sort(attribute='name') %}
                     <tr>
                     <td>
-                        <a href="{{cfg.url}}">{{ cfg.name | replace(".yml", "")}}</a>
+                        <a href="http://obofoundry.org/ontology/{{cfg.name | replace('.yml', '.html')}}" target="_new">{{ cfg.name | replace(".yml", "")}}</a>
                     </td>
                     <td>
                         {{ cfg.title }}
