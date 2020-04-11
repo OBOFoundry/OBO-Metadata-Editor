@@ -48,6 +48,19 @@ function showAlertFor(text, style, extraText='') {
 }
 
 /**
+ * Handler to allow search of the ontologies table
+ */
+$(document).ready(function(){
+  $("#table-search").val('');
+  $("#table-search").on("keyup", function() {
+    var value = $(this).val().toLowerCase();
+    $("#tb-ontologies tr").filter(function() {
+      $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
+    });
+  });
+});
+
+/**
  * Initialize the editor instance if the element with the id "code" exists.
  */
 var editor;
