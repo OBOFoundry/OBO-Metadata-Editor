@@ -1,37 +1,16 @@
-<!doctype html>
-<meta content="text/html;charset=utf-8" http-equiv="Content-Type">
-<meta content="utf-8" http-equiv="encoding">
+{% extends "base.jinja2" %}
 
-<link href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
-      rel="stylesheet" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh"
-      crossorigin="anonymous"/>
 
-<script src="https://kit.fontawesome.com/f2901ed411.js" crossorigin="anonymous"></script>
+{% block content %}
 
-<link rel="stylesheet" href="/purl_editor.css"/>
-
-{% set appname = "OBO Metadata Editor" %}
-
-<title>{{ appname }}</title>
-
-<div class="content">
-
-    <h1><a href="/" class="text-dark">{{ appname }}</a></h1>
-
-    {% if login is not none %}
-        <div>
-        You are logged in as <strong>{{ login }}</strong>.
-        Click <a href="/logout">here</a> to logout
+    <div class="row" >
+        <div class="col-md-12">
+            <p>
+            Choose one of the project configurations below to edit, or
+            <a href="/prepare_new" class="text-primary">add a new project configuration</a>.
+            </p>
         </div>
-    {% endif %}
-
-    <hr/>
-
-
-
-    <p>Choose one of the project configurations below to edit, or
-    <a href="/prepare_new" class="text-primary">add a new project configuration</a>.</p>
-
+    </div>
     <div class="col-md-12">
         <div class="row">
             <div class="col-md-12">
@@ -65,4 +44,4 @@
         </div>
     </div>
 
-</div>
+{% endblock %}
