@@ -6,9 +6,23 @@
       rel="stylesheet" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh"
       crossorigin="anonymous"/>
 
+<script type="text/javascript" src="https://code.jquery.com/jquery-3.4.1.slim.min.js" integrity="sha384-J6qa4849blE2+poT4WnyKhv5vZF5SrPo0iEjwBvKU7imGFAV0wwj1yYfoRSJoZ+n" crossorigin="anonymous">
+</script>
+
+<script type="text/javascript" src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.bundle.min.js"
+        integrity="sha384-6khuMg9gaYr5AxOqhkVIODVIvm9ynTT5J4V1cfthmT+emCG6yVmEZsRHdxlotUnm"
+        crossorigin="anonymous">
+</script>
+
+<script type="text/javascript"
+        src="https://cdnjs.cloudflare.com/ajax/libs/bootbox.js/5.4.0/bootbox.min.js">
+</script>
+
 <script src="https://kit.fontawesome.com/f2901ed411.js" crossorigin="anonymous"></script>
 
+<script type="text/javascript" src="/purl_editor.js" defer></script>
 <link rel="stylesheet" href="/purl_editor.css"/>
+
 
 {% set appname = "OBO Metadata Editor" %}
 
@@ -27,41 +41,62 @@
 
     <hr/>
 
-
-
     <p>Choose one of the project configurations below to edit, or
     <a href="/prepare_new" class="text-primary">add a new project configuration</a>.</p>
 
-    <div class="col-md-12">
-        <div class="row">
-            <div class="col-md-12">
-            <table class="table small">
-                <tbody>
-                {% for cfg in configs | sort(attribute='name') %}
-                    <tr>
-                    <td>
-                        <a href="http://obofoundry.org/ontology/{{cfg.name | replace('.yml', '.html')}}" target="_new">{{ cfg.name | replace(".yml", "")}}</a>
-                    </td>
-                    <td>
-                        {{ cfg.title }}
-                    </td>
-                    <td>
-                        {{ cfg.description }}
-                    </td>
-                    <td style="min-width:100px">
-                        <a href="/edit/{{ cfg.path }}">
-                            <button type="button" class="btn btn-light border border-secondary" aria-label="Left Align" title="Edit PURLs">
-                            <span class="small" style="white-space: nowrap;">
-                            <i class="fas fa-pencil-alt"></i>
-                            Edit PURLs</span>
-                            </button>
-                        </a>
-                    </td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
+    <div class="row justify-content-end">
+        <div class="col"></div> <!-- empty col for flexible right-alignment of search -->
+        <div class="col-md-8">
+            <div class="input-group mb-3">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" id="basic-text1">
+                        <i class="fas fa-search" aria-hidden="true"></i>
+                    </span>
+                </div>
+                <input id="table-search" class="form-control" type="text" placeholder="Search ontology table" aria-label="Search"></input>
+                <div class="input-group-append">
+                    <span class="input-group-text" id="search-result-count">{{configs|length}} rows</span>
+                </div>
+                &nbsp;
+                <a href="" onclick="javascript: clearTableSearch(); return false;" class="text-dark">
+                    <button type="button" class="btn btn-light border border-secondary" aria-label="Left Align" title="Clear Search">
+                        <span class="small" style="white-space: nowrap;">
+                        <i class="far fa-times-circle"></i>
+                        Clear Search</span>
+                    </button>
+                </a>
             </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+        <table class="table small">
+            <tbody id="tb-ontologies" >
+            {% for cfg in configs | sort(attribute='name') %}
+                <tr>
+                <td>
+                    <a href="http://obofoundry.org/ontology/{{cfg.name | replace('.yml', '.html')}}" target="_new">{{ cfg.name | replace(".yml", "")}}</a>
+                </td>
+                <td>
+                    {{ cfg.title }}
+                </td>
+                <td>
+                    {{ cfg.description }}
+                </td>
+                <td style="min-width:100px">
+                    <a href="/edit/{{ cfg.path }}">
+                        <button type="button" class="btn btn-light border border-secondary" aria-label="Left Align" title="Edit PURLs">
+                        <span class="small" style="white-space: nowrap;">
+                        <i class="fas fa-pencil-alt"></i>
+                        Edit PURLs</span>
+                        </button>
+                    </a>
+                </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
         </div>
     </div>
 
