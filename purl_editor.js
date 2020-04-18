@@ -54,11 +54,29 @@ $(document).ready(function(){
   $("#table-search").val('');
   $("#table-search").on("keyup", function() {
     var value = $(this).val().toLowerCase();
-    $("#tb-ontologies tr").filter(function() {
-      $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
-    });
+    doTableSearch(value)
   });
 });
+
+/**
+ * Applies a particular search value to filter the ontologies table
+ */
+function doTableSearch(searchVal) {
+    $("#tb-ontologies tr").filter(function() {
+      $(this).toggle($(this).text().toLowerCase().indexOf(searchVal) > -1)
+    });
+    var rowCount = $('#tb-ontologies tr:visible').length;
+    $("#search-result-count").text(rowCount+" rows");
+}
+
+/**
+ * Removes any applied search filters from the ontologies table
+ */
+function clearTableSearch() {
+    $("#table-search").val('');
+    doTableSearch('');
+}
+
 
 /**
  * Initialize the editor instance if the element with the id "code" exists.

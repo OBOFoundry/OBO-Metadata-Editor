@@ -44,42 +44,59 @@
     <p>Choose one of the project configurations below to edit, or
     <a href="/prepare_new" class="text-primary">add a new project configuration</a>.</p>
 
-    <p class="text-right">
-   <label for="table-search" class="control-label">Search:</label>
-   <span class="fas fa-search" aria-hidden="true"></span>
-   <input id="table-search" class="form-control ml-1 w-25" type="text" placeholder="Search ontology table" aria-label="Search" style="display:inline"></input>
-   </p>
-
-    <div class="col-md-12">
-        <div class="row">
-            <div class="col-md-12">
-            <table class="table small">
-                <tbody id="tb-ontologies" >
-                {% for cfg in configs | sort(attribute='name') %}
-                    <tr>
-                    <td>
-                        <a href="http://obofoundry.org/ontology/{{cfg.name | replace('.yml', '.html')}}" target="_new">{{ cfg.name | replace(".yml", "")}}</a>
-                    </td>
-                    <td>
-                        {{ cfg.title }}
-                    </td>
-                    <td>
-                        {{ cfg.description }}
-                    </td>
-                    <td style="min-width:100px">
-                        <a href="/edit/{{ cfg.path }}">
-                            <button type="button" class="btn btn-light border border-secondary" aria-label="Left Align" title="Edit PURLs">
-                            <span class="small" style="white-space: nowrap;">
-                            <i class="fas fa-pencil-alt"></i>
-                            Edit PURLs</span>
-                            </button>
-                        </a>
-                    </td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
+    <div class="row justify-content-end">
+        <div class="col"></div> <!-- empty col for flexible right-alignment of search -->
+        <div class="col-md-8">
+            <div class="input-group mb-3">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" id="basic-text1">
+                        <i class="fas fa-search" aria-hidden="true"></i>
+                    </span>
+                </div>
+                <input id="table-search" class="form-control" type="text" placeholder="Search ontology table" aria-label="Search"></input>
+                <div class="input-group-append">
+                    <span class="input-group-text" id="search-result-count">{{configs|length}} rows</span>
+                </div>
+                &nbsp;
+                <a href="" onclick="javascript: clearTableSearch(); return false;" class="text-dark">
+                    <button type="button" class="btn btn-light border border-secondary" aria-label="Left Align" title="Clear Search">
+                        <span class="small" style="white-space: nowrap;">
+                        <i class="far fa-times-circle"></i>
+                        Clear Search</span>
+                    </button>
+                </a>
             </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+        <table class="table small">
+            <tbody id="tb-ontologies" >
+            {% for cfg in configs | sort(attribute='name') %}
+                <tr>
+                <td>
+                    <a href="http://obofoundry.org/ontology/{{cfg.name | replace('.yml', '.html')}}" target="_new">{{ cfg.name | replace(".yml", "")}}</a>
+                </td>
+                <td>
+                    {{ cfg.title }}
+                </td>
+                <td>
+                    {{ cfg.description }}
+                </td>
+                <td style="min-width:100px">
+                    <a href="/edit/{{ cfg.path }}">
+                        <button type="button" class="btn btn-light border border-secondary" aria-label="Left Align" title="Edit PURLs">
+                        <span class="small" style="white-space: nowrap;">
+                        <i class="fas fa-pencil-alt"></i>
+                        Edit PURLs</span>
+                        </button>
+                    </a>
+                </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
         </div>
     </div>
 
