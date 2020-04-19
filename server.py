@@ -67,7 +67,7 @@ except Exception as e:
 
 class User(Base):
   """
-  Saved information for users that have been authenticated to the purl-editor. Note that this table
+  Saved information for users that have been authenticated to the metadata editor. Note that this table
   preserves historical data (user records are not deleted when a user logs out)
   """
   __tablename__ = 'users'
@@ -120,7 +120,7 @@ def token_getter():
 def authorized(access_token):
   """
   After the user is authenticated in GitHub, GitHub will redirect to this route, and the
-  purl-editor authentication will be finalised on the server.
+  metadata editor authentication will be finalised on the server.
   """
   next_url = request.args.get('next') or url_for('index')
 
@@ -267,12 +267,12 @@ def edit_new():
                            notfound='{}/{} does not exist'.format(github_org, github_repo))
 
   # Generate some text to populate the editor initially with, based on the new project template, and
-  # then inject it into the jinja2 template for the purl-editor:
+  # then inject it into the jinja2 template for the metadata editor:
   yaml = app.config['NEW_PROJECT_TEMPLATE'].format(
     idspace_upper=project_id.upper(), idspace_lower=project_id.casefold(),
     org=github_org, git=github_repo)
 
-  return render_template('purl_editor.jinja2',
+  return render_template('editor.jinja2',
                          filename='{}.yml'.format(project_id.lower()),
                          existing=False,
                          yaml=yaml,
@@ -295,7 +295,7 @@ def prepare_new():
 def edit_config(path):
   """
   Get the contents of the given path from the github repository and render it in the
-  editor using the jinja2 template for the purl-editor
+  editor using the jinja2 template for the metadata editor
   """
   config_file = github.get(
     'repos/{}/{}/contents/{}'.format(app.config['GITHUB_ORG'], app.config['GITHUB_REPO'], path))
@@ -304,7 +304,7 @@ def edit_config(path):
 
   decodedBytes = base64.b64decode(config_file['content'])
   decodedStr = str(decodedBytes, "utf-8")
-  return render_template('purl_editor.jinja2',
+  return render_template('editor.jinja2',
                          existing=True,
                          yaml=decodedStr,
                          filename=config_file['name'],
