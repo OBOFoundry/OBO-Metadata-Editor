@@ -1,6 +1,6 @@
-# OBO PURL YAML Code Editor
+# OBO Metadata Editor
 
-A web based editor for modifying existing and creating new OBO PURL YAML configurations.
+A web based editor for modifying existing and creating new OBO Metadata configurations.
 
 ## Before running the server:
 
