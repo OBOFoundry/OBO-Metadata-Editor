@@ -20,6 +20,7 @@ from urllib.request import urlopen
 # To run in development mode, do:
 # export FLASK_APP=server.py
 # export FLASK_DEBUG=1 (optional)
+# export FLASK_ENV=development (optional)
 # python3 -m flask run
 
 # Note that the following environment variables must be set:
@@ -41,7 +42,7 @@ logger.setLevel(app.config['LOG_LEVEL'])
 pwd = app.config['PWD']
 
 # Load the validation schema:
-schema = json.load(open(app.config['SCHEMAFILE']))
+purl_schema = json.load(open(app.config['PURL_SCHEMA']))
 
 # Setup github-flask through which we'll communicate with the GitHub API:
 github = GitHub(app)
@@ -209,7 +210,7 @@ def index():
   """
   # Get all of the available config files to edit:
   full_configs = github.get('repos/{}/{}/contents/config'
-                            .format(app.config['GITHUB_ORG'], app.config['GITHUB_REPO']))
+                            .format(app.config['GITHUB_ORG'], app.config['GITHUB_PURL_REPO']))
   if not full_configs:
     raise Exception("Could not get contents of the config directory")
 
@@ -298,7 +299,7 @@ def edit_config(path):
   editor using the jinja2 template for the metadata editor
   """
   config_file = github.get(
-    'repos/{}/{}/contents/{}'.format(app.config['GITHUB_ORG'], app.config['GITHUB_REPO'], path))
+    'repos/{}/{}/contents/{}'.format(app.config['GITHUB_ORG'], app.config['GITHUB_PURL_REPO'], path))
   if not config_file:
     raise Exception("Could not get the contents of: {}".format(path))
 
@@ -382,7 +383,7 @@ def validate():
   try:
     code = request.form['code']
     yaml_source = yaml.load(code, Loader=yaml.SafeLoader)
-    jsonschema.validate(yaml_source, schema)
+    jsonschema.validate(yaml_source, purl_schema)
   except (yaml.YAMLError, TypeError) as err:
     return (jsonify({'summary': "YAML parsing error",
                      'line_number': -1,
@@ -533,7 +534,7 @@ def update_config():
 
   # Get the contents of the current version of the file:
   curr_contents = github.get('repos/{}/{}/contents/config/{}'
-                             .format(app.config['GITHUB_ORG'], app.config['GITHUB_REPO'], filename))
+                             .format(app.config['GITHUB_ORG'], app.config['GITHUB_PURL_REPO'], filename))
   if not curr_contents:
     raise Exception("Could not get the contents of: {}".format(filename))
 
@@ -546,7 +547,7 @@ def update_config():
     return Response("Update request refused: The submitted configuration is identical to the "
                     "currently saved version.", status=422)
 
-  repo = '{}/{}'.format(app.config['GITHUB_ORG'], app.config['GITHUB_REPO'])
+  repo = '{}/{}'.format(app.config['GITHUB_ORG'], app.config['GITHUB_PURL_REPO'])
 
   try:
     file_sha = get_file_sha(repo, filename)
@@ -579,3 +580,4 @@ init_db()
 if __name__ == '__main__':
   app.run(host=app.config['FLASK_HOST'], port=app.config['FLASK_PORT'],
           debug=True if app.config['LOG_LEVEL'] == 'DEBUG' else False)
+
