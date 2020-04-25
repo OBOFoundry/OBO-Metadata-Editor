@@ -379,10 +379,10 @@ var validate = function(filename) {
 /**
  * Submit a pull request to github to add a new configuration to the repository.
  */
-var add_config = function(filename) {
+var add_config = function(filename, repo) {
   // Get a confirmation from the user:
   bootbox.prompt({
-    title: "Please describe the new configuration you would like to add: " +
+    title: "Please describe the new configuration you would like to add to "+repo+": " +
       filename.toUpperCase().replace(".YML", ""),
     inputType: 'textarea',
     value: 'Adding ' + filename,
@@ -455,10 +455,10 @@ var add_config = function(filename) {
 /**
  * Submit a pull request to github to update the given configuration file in the repository.
  */
-var update_config = function(filename) {
+var update_config = function(filename,repo) {
   // Get a confirmation from the user:
   bootbox.prompt({
-    title: "Please describe the changes you have made to " +
+    title: "You are about to submit changes to "+repo+". Please describe the changes you have made to " +
       filename.toUpperCase().replace(".YML", ""),
     inputType: 'textarea',
     value: 'Updating ' + filename,
@@ -520,7 +520,8 @@ var update_config = function(filename) {
         request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
         request.send('filename=' + filename +
                      '&commit_msg=' + commit_msg +
-                     '&code=' + encodeURIComponent(code))
+                     '&code=' + encodeURIComponent(code) +
+                     '&repo='+repo)
         $("*").css("cursor", "progress");
       }
     }

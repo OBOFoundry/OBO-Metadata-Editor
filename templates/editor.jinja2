@@ -37,10 +37,10 @@
     </button>
     {% if existing %}
       <button id="update-btn" class="btn btn-danger"
-              onclick="update_config('{{ filename }}')" disabled>Submit update
+              onclick="update_config('{{ filename }}', '{{ repo }}')" disabled>Submit update
       </button>
     {% else %}
-      <button id="add-btn" class="btn btn-danger" onclick="add_config('{{ filename }}')" disabled>
+      <button id="add-btn" class="btn btn-danger" onclick="add_config('{{ filename }}', '{{ repo }}')" disabled>
         Add configuration
       </button>
     {% endif %}

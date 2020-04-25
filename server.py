@@ -308,6 +308,7 @@ def edit_config(path):
   return render_template('editor.jinja2',
                          existing=True,
                          yaml=decodedStr,
+                         repo= '{}/{}'.format(app.config['GITHUB_ORG'], app.config['GITHUB_PURL_REPO']),
                          filename=config_file['name'],
                          login=g.user.github_login)
 
@@ -498,10 +499,11 @@ def add_config():
   filename = request.form.get('filename')
   code = request.form.get('code')
   commit_msg = request.form.get('commit_msg')
+  repo = request.form.get('repo')
   if any([item is None for item in [filename, commit_msg, code]]):
     return Response("Malformed POST request", status=400)
 
-  repo = '{}/{}'.format(app.config['GITHUB_ORG'], app.config['GITHUB_REPO'])
+  # repo = '{}/{}'.format(app.config['GITHUB_ORG'], app.config['GITHUB_REPO'])
 
   try:
     master_sha = get_master_sha(repo)
@@ -528,6 +530,7 @@ def update_config():
   filename = request.form.get('filename')
   code = request.form.get('code')
   commit_msg = request.form.get('commit_msg')
+  repo = request.form.get('repo')
 
   if any([item is None for item in [filename, commit_msg, code]]):
     return Response("Malformed POST request", status=400)
@@ -547,7 +550,7 @@ def update_config():
     return Response("Update request refused: The submitted configuration is identical to the "
                     "currently saved version.", status=422)
 
-  repo = '{}/{}'.format(app.config['GITHUB_ORG'], app.config['GITHUB_PURL_REPO'])
+  #repo = '{}/{}'.format(app.config['GITHUB_ORG'], app.config['GITHUB_PURL_REPO'])
 
   try:
     file_sha = get_file_sha(repo, filename)
