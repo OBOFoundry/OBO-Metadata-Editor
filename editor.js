@@ -29,11 +29,11 @@ function showAlertFor(text, style, extraText='') {
     $("#status-area").removeClass()
     $("#status-area").show()
     $("#status-area").addClass("alert "+style+" alert-dismissable fade show");
-    $("#alert-message").text(text);
+    $("#alert-message").html(text);
 
     if ( extraText.length > 0) {
         $("#details-area").show();
-        $("#detail-message").text(extraText);
+        $("#detail-message").html(extraText);
     } else {
         $("#detail-message").text(extraText);
         $("#details-area").hide();
@@ -411,10 +411,7 @@ var add_config = function(filename) {
         // Extract the code from the text area:
         var code = document.getElementById("code").value;
 
-        // Clear the status area:
-        var statusArea = document.getElementById("status-area");
-        statusArea.style.color = "#000000";
-        statusArea.innerHTML = "Submitting new configuration ...";
+        showAlertFor("Submitting new configuration ...","alert-info");
 
         // Embed the code into a request.
         var request = new XMLHttpRequest();
@@ -423,26 +420,22 @@ var add_config = function(filename) {
           $("*").css("cursor", "default");
           if (request.readyState === 4) {
             if (!request.status) {
-              statusArea.style.color = "#FF0000";
-              statusArea.innerHTML = "Problem communicating with server";
+              showAlertFor("Problem communicating with server","alert-danger");
             }
             else if (request.status === 200) {
               var response = JSON.parse(request.responseText);
               var prInfo = response['pr_info'];
-              statusArea.style.color = "#00CD00";
-              statusArea.innerHTML = 'New configuration submitted successfully. It will be ' +
+              showAlertFor('New configuration submitted successfully. It will be ' +
                 'reviewed by a moderator before being added to the repository. Click ' +
                 '<a href="' + prInfo['html_url'] + '" target="__blank">here</a> to view your ' +
-                'pull request on GitHub.';
+                'pull request on GitHub.',"alert-success");
             }
             else {
               // Display the error message in the status area. Note that we must replace any angle
               // angle brackets with HTML escape codes.
               alertText = "Submission of new configuration failed.\n\n" +
                 request.responseText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-              alertText = '<div class="preformatted">' + alertText + '</div>';
-              statusArea.style.color = "#FF0000";
-              statusArea.innerHTML = alertText;
+              showAlertFor(alertText,"alert-danger");
             }
           }
         }
@@ -494,10 +487,7 @@ var update_config = function(filename) {
         // Extract the code from the text area:
         var code = document.getElementById("code").value;
 
-        // Clear the status area:
-        var statusArea = document.getElementById("status-area");
-        statusArea.style.color = "#000000";
-        statusArea.innerHTML = "Submitting update ...";
+        showAlertFor("Submitting update ...","alert-info");
 
         // Embed the code into a request.
         var request = new XMLHttpRequest();
@@ -506,26 +496,22 @@ var update_config = function(filename) {
           $("*").css("cursor", "default");
           if (request.readyState === 4) {
             if (!request.status) {
-              statusArea.style.color = "#FF0000";
-              statusArea.innerHTML = "Problem communicating with server";
+              showAlertFor("Problem communicating with server","alert-danger");
             }
             else if (request.status === 200) {
               var response = JSON.parse(request.responseText);
               var prInfo = response['pr_info'];
-              statusArea.style.color = "#00CD00";
-              statusArea.innerHTML = 'Update submitted successfully. The changes will be ' +
+              showAlertFor('Update submitted successfully. The changes will be ' +
                 'reviewed by a moderator before being added to the repository. Click ' +
                 '<a href="' + prInfo['html_url'] + '" target="__blank">here</a> to view your ' +
-                'pull request on GitHub.';
+                'pull request on GitHub.',"alert-success");
             }
             else {
               // Display the error message in the status area. Note that we must replace any angle
               // angle brackets with HTML escape codes.
               alertText = "Submission of update failed.\n\n" +
                 request.responseText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-              alertText = '<div class="preformatted">' + alertText + '</div>';
-              statusArea.style.color = "#FF0000";
-              statusArea.innerHTML = alertText;
+              showAlertFor(alertText,"alert-danger");
             }
           }
         }
