@@ -54,13 +54,22 @@
                         {{ cfg.description }}
                     </td>
                     <td style="min-width:100px">
-                        <a href="/edit/{{ cfg.path }}">
+                        <a href="/edit/purl/{{ cfg.purl_path }}">
                             <button type="button" class="btn btn-light border border-secondary" aria-label="Left Align" title="Edit PURLs">
                             <span class="small" style="white-space: nowrap;">
                             <i class="fas fa-pencil-alt"></i>
                             Edit PURLs</span>
                             </button>
                         </a>
+                        {% if dev and cfg.registry_path %}
+                            <a href="/edit/registry/{{ cfg.registry_path }}">
+                                <button type="button" class="btn btn-light border border-secondary" aria-label="Left Align" title="Edit Registry">
+                                <span class="small" style="white-space: nowrap;">
+                                <i class="fas fa-pencil-alt"></i>
+                                Edit Registry Config</span>
+                                </button>
+                            </a>
+                        {% endif %}
                     </td>
                     </tr>
                 {% endfor %}

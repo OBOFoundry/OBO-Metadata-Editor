@@ -379,10 +379,10 @@ var validate = function(filename) {
 /**
  * Submit a pull request to github to add a new configuration to the repository.
  */
-var add_config = function(filename, repo) {
+var add_config = function(filename, editor_type) {
   // Get a confirmation from the user:
   bootbox.prompt({
-    title: "Please describe the new configuration you would like to add to "+repo+": " +
+    title: "Please describe the new configuration you would like to add: " +
       filename.toUpperCase().replace(".YML", ""),
     inputType: 'textarea',
     value: 'Adding ' + filename,
@@ -444,7 +444,8 @@ var add_config = function(filename, repo) {
         request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
         request.send('filename=' + filename +
                      '&commit_msg=' + commit_msg +
-                     '&code=' + encodeURIComponent(code))
+                     '&code=' + encodeURIComponent(code) +
+                     '&editor_type=' + editor_type)
         $("*").css("cursor", "progress");
       }
     }
@@ -455,10 +456,10 @@ var add_config = function(filename, repo) {
 /**
  * Submit a pull request to github to update the given configuration file in the repository.
  */
-var update_config = function(filename,repo) {
+var update_config = function(filename,editor_type) {
   // Get a confirmation from the user:
   bootbox.prompt({
-    title: "You are about to submit changes to "+repo+". Please describe the changes you have made to " +
+    title: "You are about to submit changes. Please describe the changes you have made to " +
       filename.toUpperCase().replace(".YML", ""),
     inputType: 'textarea',
     value: 'Updating ' + filename,
@@ -521,7 +522,7 @@ var update_config = function(filename,repo) {
         request.send('filename=' + filename +
                      '&commit_msg=' + commit_msg +
                      '&code=' + encodeURIComponent(code) +
-                     '&repo='+repo)
+                     '&editor_type='+editor_type)
         $("*").css("cursor", "progress");
       }
     }

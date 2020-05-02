@@ -55,6 +55,14 @@ db_session = scoped_session(sessionmaker(autocommit=False,
 Base = declarative_base()
 Base.query = db_session.query_property()
 
+# Boolean for managing current running state feature (show/hide in-development features)
+dev = app.config["ENV"]=='development'
+
+
+# Utility dictionary for linking editor types to repositories and content directories
+editor_types = {"purl": {"repo":app.config["GITHUB_PURL_REPO"],"dir":app.config["GITHUB_PURL_DIR"]},
+                "registry": {"repo":app.config["GITHUB_FOUNDRY_REPO"],"dir":app.config["GITHUB_FOUNDRY_DIR"]}}
+
 
 # Retrieve the ontology metadata:
 try:
@@ -209,24 +217,39 @@ def index():
   Renders the index page of the application
   """
   # Get all of the available config files to edit:
-  full_configs = github.get('repos/{}/{}/contents/config'
-                            .format(app.config['GITHUB_ORG'], app.config['GITHUB_PURL_REPO']))
-  if not full_configs:
-    raise Exception("Could not get contents of the config directory")
+  purl_configs = github.get('repos/{}/{}/contents/{}'.format(app.config['GITHUB_ORG'],
+                            editor_types['purl']['repo'], editor_types['purl']['dir']))
+  if not purl_configs:
+    raise Exception("Could not get contents of the purl config directory")
 
-  # Add the title, url and description for each config to the records that will be rendered. This information is found in the
-  # ontology metadata.
+  if dev:
+    # Get all of the available registry config files to edit:
+    registry_configs = github.get('repos/{}/{}/contents/{}'.format(app.config['GITHUB_ORG'],
+                                  editor_types['registry']['repo'],editor_types['registry']['dir']))
+    if not registry_configs:
+      raise Exception("Could not get contents of the registry config directory")
+
+  # TODO: Currently this adds entries to the table if they are in the PURL repository,
+  # TODO: which should be changed to include registry-only entries.
+
+  # Add the title, url and description for each config to the records that will be rendered.
+  # This information is found in the ontology metadata.
   configs = []
-  for full_config in full_configs:
-    config_id = full_config['name'].casefold().replace(".yml", "")
+  for purl_config in purl_configs:
+    config_id = purl_config['name'].casefold().replace(".yml", "")
     # We skip the OBO idspace:
     if config_id != "obo":
       config_title = [o['title'] for o in ontology_md if o['id'] == config_id]
       config_title = config_title.pop() if config_title else ""
       config_description = [o['description'] for o in ontology_md if o['id'] == config_id and 'description' in o]
       config_description = config_description.pop() if config_description else ""
+      if dev and registry_configs:
+        registries_for_idspace = [x for x in registry_configs if x['name'] == config_id + ".md"]
+
       configs.append(
-        {'name': full_config['name'], 'path': full_config['path'], 'title': config_title, 'description': config_description})
+        {'name': purl_config['name'], 'purl_path': purl_config['path'],
+         'registry_path': registries_for_idspace[0]['path'] if dev and len(registries_for_idspace)>0 else None,
+         'title': config_title, 'description': config_description})
 
   return render_template('index.jinja2', configs=configs, login=g.user.github_login)
 
@@ -291,15 +314,18 @@ def prepare_new():
   return render_template('prepare_new_config.jinja2', login=g.user.github_login)
 
 
-@app.route('/edit/<path:path>')
+@app.route('/edit/<editor_type>/<path:path>')
 @verify_logged_in
-def edit_config(path):
+def edit_config(path, editor_type):
   """
-  Get the contents of the given path from the github repository and render it in the
-  editor using the jinja2 template for the metadata editor
+  Get the contents of the given path (purl or registry) from the github repository
+  and render it in the editor using the jinja2 template for the metadata editor
   """
+  if editor_type not in editor_types.keys():
+    raise Exception("Unknown metadata type: {}".format(editor_type))
+
   config_file = github.get(
-    'repos/{}/{}/contents/{}'.format(app.config['GITHUB_ORG'], app.config['GITHUB_PURL_REPO'], path))
+      'repos/{}/{}/contents/{}'.format(app.config['GITHUB_ORG'], editor_types[editor_type]['repo'], path))
   if not config_file:
     raise Exception("Could not get the contents of: {}".format(path))
 
@@ -307,8 +333,8 @@ def edit_config(path):
   decodedStr = str(decodedBytes, "utf-8")
   return render_template('editor.jinja2',
                          existing=True,
+                         editor_type=editor_type,
                          yaml=decodedStr,
-                         repo= '{}/{}'.format(app.config['GITHUB_ORG'], app.config['GITHUB_PURL_REPO']),
                          filename=config_file['name'],
                          login=g.user.github_login)
 
@@ -499,11 +525,11 @@ def add_config():
   filename = request.form.get('filename')
   code = request.form.get('code')
   commit_msg = request.form.get('commit_msg')
-  repo = request.form.get('repo')
-  if any([item is None for item in [filename, commit_msg, code]]):
+  editor_type = request.form.get('editor_type')
+  if any([item is None for item in [filename, commit_msg, code, editor_type]]):
     return Response("Malformed POST request", status=400)
 
-  # repo = '{}/{}'.format(app.config['GITHUB_ORG'], app.config['GITHUB_REPO'])
+  repo = '{}/{}'.format(app.config['GITHUB_ORG'], editor_types[editor_type]['repo'])
 
   try:
     master_sha = get_master_sha(repo)
@@ -525,19 +551,20 @@ def add_config():
 @verify_logged_in
 def update_config():
   """
-  Route for initiating a pull request to update a config file in the github repository.
+  Route for initiating a pull request to update a PURL config file in the github repository.
   """
   filename = request.form.get('filename')
   code = request.form.get('code')
   commit_msg = request.form.get('commit_msg')
-  repo = request.form.get('repo')
+  editor_type = request.form.get('editor_type')
 
-  if any([item is None for item in [filename, commit_msg, code]]):
+  if any([item is None for item in [filename, commit_msg, code, editor_type]]):
     return Response("Malformed POST request", status=400)
 
   # Get the contents of the current version of the file:
-  curr_contents = github.get('repos/{}/{}/contents/config/{}'
-                             .format(app.config['GITHUB_ORG'], app.config['GITHUB_PURL_REPO'], filename))
+  curr_contents = github.get('repos/{}/{}/contents/{}/{}'
+                             .format(app.config['GITHUB_ORG'], editor_types[editor_type]['repo'],
+                                     editor_types[editor_type]['dir'], filename))
   if not curr_contents:
     raise Exception("Could not get the contents of: {}".format(filename))
 
@@ -550,7 +577,7 @@ def update_config():
     return Response("Update request refused: The submitted configuration is identical to the "
                     "currently saved version.", status=422)
 
-  #repo = '{}/{}'.format(app.config['GITHUB_ORG'], app.config['GITHUB_PURL_REPO'])
+  repo = '{}/{}'.format(app.config['GITHUB_ORG'], editor_types[editor_type]['repo'])
 
   try:
     file_sha = get_file_sha(repo, filename)

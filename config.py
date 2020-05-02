@@ -18,8 +18,12 @@ PWD = os.path.dirname(os.path.realpath(__file__))
 GITHUB_ORG = 'OBOFoundry'
 # The github repository to use for editing PURL configuration (e.g. 'purl.obolibrary.org')
 GITHUB_PURL_REPO = 'purl.obolibrary.org'
-# The github repository to use for editing Foundry metadata (e.g. 'OBOFoundry.github.io')
+# The directory in which the PURL config files are stored within the PURL repo
+GITHUB_PURL_DIR = 'config'
+# The github repository to use for editing Foundry registry (e.g. 'OBOFoundry.github.io')
 GITHUB_FOUNDRY_REPO = 'OBOFoundry.github.io'
+# The directory in which the Registry config files within the Foundry repo
+GITHUB_FOUNDRY_DIR = 'ontology'
 
 # The location of the PURL validation schema:
 PURL_SCHEMA = "{}/../purl.obolibrary.org/tools/config.schema.json".format(PWD)
