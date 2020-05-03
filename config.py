@@ -25,6 +25,11 @@ GITHUB_FOUNDRY_REPO = 'OBOFoundry.github.io'
 # The directory in which the Registry config files within the Foundry repo
 GITHUB_FOUNDRY_DIR = 'ontology'
 
+# File extension for YAML files
+YAML_EXT = ".yml"
+# File extension for Markdown files
+MARKDOWN_EXT = ".md"
+
 # The location of the PURL validation schema:
 PURL_SCHEMA = "{}/../purl.obolibrary.org/tools/config.schema.json".format(PWD)
 

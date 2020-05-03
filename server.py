@@ -236,7 +236,7 @@ def index():
   # This information is found in the ontology metadata.
   configs = []
   for purl_config in purl_configs:
-    config_id = purl_config['name'].casefold().replace(".yml", "")
+    config_id = purl_config['name'].casefold().replace(app.config["YAML_EXT"], "")
     # We skip the OBO idspace:
     if config_id != "obo":
       config_title = [o['title'] for o in ontology_md if o['id'] == config_id]
@@ -244,11 +244,11 @@ def index():
       config_description = [o['description'] for o in ontology_md if o['id'] == config_id and 'description' in o]
       config_description = config_description.pop() if config_description else ""
       if dev and registry_configs:
-        registries_for_idspace = [x for x in registry_configs if x['name'] == config_id + ".md"]
+        registries_for_idspace = [x for x in registry_configs if x['name'] == config_id + app.config["MARKDOWN_EXT"]]
 
       configs.append(
-        {'name': purl_config['name'], 'purl_path': purl_config['path'],
-         'registry_path': registries_for_idspace[0]['path'] if dev and len(registries_for_idspace)>0 else None,
+        {'purl_filename': purl_config['name'],
+         'registry_filename': registries_for_idspace[0]['name'] if dev and len(registries_for_idspace)>0 else None,
          'title': config_title, 'description': config_description})
 
   return render_template('index.jinja2', configs=configs, login=g.user.github_login)
@@ -297,7 +297,7 @@ def edit_new():
     org=github_org, git=github_repo)
 
   return render_template('editor.jinja2',
-                         filename='{}.yml'.format(project_id.lower()),
+                         filename='{}{}'.format(project_id.lower(),app.config["YAML_EXT"]),
                          existing=False,
                          yaml=yaml,
                          login=g.user.github_login)
@@ -314,9 +314,9 @@ def prepare_new():
   return render_template('prepare_new_config.jinja2', login=g.user.github_login)
 
 
-@app.route('/edit/<editor_type>/<path:path>')
+@app.route('/edit/<editor_type>/<filename>')
 @verify_logged_in
-def edit_config(path, editor_type):
+def edit_config(editor_type, filename):
   """
   Get the contents of the given path (purl or registry) from the github repository
   and render it in the editor using the jinja2 template for the metadata editor
@@ -325,9 +325,12 @@ def edit_config(path, editor_type):
     raise Exception("Unknown metadata type: {}".format(editor_type))
 
   config_file = github.get(
-      'repos/{}/{}/contents/{}'.format(app.config['GITHUB_ORG'], editor_types[editor_type]['repo'], path))
+      'repos/{}/{}/contents/{}/{}'.format(app.config['GITHUB_ORG'],
+                                          editor_types[editor_type]['repo'],
+                                          editor_types[editor_type]['dir'],
+                                          filename))
   if not config_file:
-    raise Exception("Could not get the contents of: {}".format(path))
+    raise Exception("Could not get the contents of: {}".format(filename))
 
   decodedBytes = base64.b64decode(config_file['content'])
   decodedStr = str(decodedBytes, "utf-8")
@@ -443,14 +446,14 @@ def validate():
   return Response(status=200)
 
 
-def get_file_sha(repo, filename):
+def get_file_sha(repo, rep_dir, filename):
   """
   Get the sha of the given filename from the given github repository
   """
-  response = github.get('repos/{}/contents/config/{}'.format(repo, filename))
+  response = github.get('repos/{}/contents/{}/{}'.format(repo, rep_dir, filename))
   if not response or 'sha' not in response:
-    raise Exception("Unable to get the current SHA value for {} in {}"
-                    .format(filename, repo))
+    raise Exception("Unable to get the current SHA value for {} in {}/{}"
+                    .format(filename, repo, rep_dir))
   return response['sha']
 
 
@@ -472,7 +475,7 @@ def create_branch(repo, filename, master_sha):
   # Generate the branch name:
   branch = "{login}_{idspace}_{utc}".format(
     login=g.user.github_login,
-    idspace=filename.replace(".yml", "").upper(),
+    idspace=filename.replace(app.config["YAML_EXT"], "").upper(),
     utc=datetime.utcnow().strftime("%Y-%m-%d_%H%M%S"))
 
   response = github.post('repos/{}/git/refs'.format(repo),
@@ -483,7 +486,7 @@ def create_branch(repo, filename, master_sha):
   return branch
 
 
-def commit_to_branch(repo, branch, code, filename, commit_msg, file_sha=None):
+def commit_to_branch(repo, branch, code, rep_dir, filename, commit_msg, file_sha=None):
   """
   Commit the given code to the given branch in the given repo, using the given commit message.
   If the optional file_sha parameter is specified (because this commit is for an existing file)
@@ -496,7 +499,7 @@ def commit_to_branch(repo, branch, code, filename, commit_msg, file_sha=None):
   if file_sha:
     data['sha'] = file_sha
 
-  response = github.put('repos/{}/contents/config/{}'.format(repo, filename), data=data)
+  response = github.put('repos/{}/contents/{}/{}'.format(repo, rep_dir, filename), data=data)
   if not response:
     raise Exception("Unable to commit addition of {} to branch {} in {}"
                     .format(filename, branch, repo))
@@ -535,7 +538,7 @@ def add_config():
     master_sha = get_master_sha(repo)
     new_branch = create_branch(repo, filename, master_sha)
     logger.info("Created a new branch: {} in {}".format(new_branch, repo))
-    commit_to_branch(repo, new_branch, code, filename, commit_msg)
+    commit_to_branch(repo, new_branch, code, editor_types[editor_type]['dir'], filename, commit_msg)
     logger.info("Committed addition of {} to branch {} in {}".format(filename, new_branch, repo))
     pr_info = create_pr(repo, new_branch, commit_msg)
     logger.info("Created a PR for branch {} in {}".format(new_branch, repo))
@@ -580,11 +583,11 @@ def update_config():
   repo = '{}/{}'.format(app.config['GITHUB_ORG'], editor_types[editor_type]['repo'])
 
   try:
-    file_sha = get_file_sha(repo, filename)
+    file_sha = get_file_sha(repo, editor_types[editor_type]['dir'], filename)
     master_sha = get_master_sha(repo)
     new_branch = create_branch(repo, filename, master_sha)
     logger.info("Created a new branch: {} in {}".format(new_branch, repo))
-    commit_to_branch(repo, new_branch, code, filename, commit_msg, file_sha)
+    commit_to_branch(repo, new_branch, code, editor_types[editor_type]['dir'], filename, commit_msg, file_sha)
     logger.info("Committed update of {} to branch {} in {}".format(filename, new_branch, repo))
     pr_info = create_pr(repo, new_branch, commit_msg)
     logger.info("Created a PR for branch {} in {}".format(new_branch, repo))

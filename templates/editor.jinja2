@@ -21,7 +21,7 @@
   <h3>
     {% if existing %} Editing {% else %} Adding {% endif %}
     {% if dev %} {{ editor_type | upper }} {% endif %}
-    project configuration: {{ filename | upper | replace(".YML", "") }}</h3>
+    project configuration: {{ filename | upper | replace(".YML", "") | replace(".MD", "") }}</h3>
 
   <!-- Here is where the CodeMirror editor will live. This element is hidden but it will be used all
        the same to generate the CodeMirror editor.  -->
