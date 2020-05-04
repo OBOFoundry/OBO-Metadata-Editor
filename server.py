@@ -229,9 +229,6 @@ def index():
     if not registry_configs:
       raise Exception("Could not get contents of the registry config directory")
 
-  # TODO: Currently this adds entries to the table if they are in the PURL repository,
-  # TODO: which should be changed to include registry-only entries.
-
   # Add the title, url and description for each config to the records that will be rendered.
   # This information is found in the ontology metadata.
   configs = []
@@ -250,6 +247,19 @@ def index():
         {'id': config_id, 'purl_filename': purl_config['name'],
          'registry_filename': registries_for_idspace[0]['name'] if dev and len(registries_for_idspace)>0 else None,
          'title': config_title, 'description': config_description})
+  if dev:
+    for registry_config in registry_configs:
+      config_id = registry_config['name'].casefold().replace(app.config["MARKDOWN_EXT"], "")
+      if config_id not in [c['id'] for c in configs]:
+        config_title = [o['title'] for o in ontology_md if o['id'] == config_id]
+        config_title = config_title.pop() if config_title else ""
+        config_description = [o['description'] for o in ontology_md if o['id'] == config_id and 'description' in o]
+        config_description = config_description.pop() if config_description else ""
+        configs.append(
+          {'id': config_id, 'purl_filename': None,
+           'registry_filename': registry_config['name'],
+           'title': config_title, 'description': config_description})
+
 
   return render_template('index.jinja2', configs=configs, login=g.user.github_login)
 
