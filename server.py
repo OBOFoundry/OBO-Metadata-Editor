@@ -247,7 +247,7 @@ def index():
         registries_for_idspace = [x for x in registry_configs if x['name'] == config_id + app.config["MARKDOWN_EXT"]]
 
       configs.append(
-        {'purl_filename': purl_config['name'],
+        {'id': config_id, 'purl_filename': purl_config['name'],
          'registry_filename': registries_for_idspace[0]['name'] if dev and len(registries_for_idspace)>0 else None,
          'title': config_title, 'description': config_description})
 

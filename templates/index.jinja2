@@ -42,10 +42,10 @@
             <div class="col-md-12">
             <table class="table small" id="tb-ontologies">
                 <tbody>
-                {% for cfg in configs | sort(attribute='title') %}
+                {% for cfg in configs | sort(attribute='id') %}
                     <tr>
                     <td>
-                        <a href="http://obofoundry.org/ontology/{{cfg.name | replace('.yml', '.html')}}" target="_new">{{ cfg.name | replace(".yml", "")}}</a>
+                        <a href="http://obofoundry.org/ontology/{{cfg.id}}.html" target="_new">{{ cfg.id }}</a>
                     </td>
                     <td>
                         {{ cfg.title }}
