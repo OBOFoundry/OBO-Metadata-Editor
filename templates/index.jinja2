@@ -42,10 +42,10 @@
             <div class="col-md-12">
             <table class="table small" id="tb-ontologies">
                 <tbody>
-                {% for cfg in configs | sort(attribute='name') %}
+                {% for cfg in configs | sort(attribute='id') %}
                     <tr>
                     <td>
-                        <a href="http://obofoundry.org/ontology/{{cfg.name | replace('.yml', '.html')}}" target="_new">{{ cfg.name | replace(".yml", "")}}</a>
+                        <a href="http://obofoundry.org/ontology/{{cfg.id}}.html" target="_new">{{ cfg.id }}</a>
                     </td>
                     <td>
                         {{ cfg.title }}
@@ -53,14 +53,27 @@
                     <td>
                         {{ cfg.description }}
                     </td>
-                    <td style="min-width:100px">
-                        <a href="/edit/{{ cfg.path }}">
-                            <button type="button" class="btn btn-light border border-secondary" aria-label="Left Align" title="Edit PURLs">
-                            <span class="small" style="white-space: nowrap;">
-                            <i class="fas fa-pencil-alt"></i>
-                            Edit PURLs</span>
-                            </button>
-                        </a>
+                    <td style="min-width:100px white-space: nowrap;">
+                        <div class="btn-group" role="group" aria-label="Edit Actions">
+                          {% if dev and cfg.registry_filename %}
+                            <a href="/edit/registry/{{ cfg.registry_filename }}">
+                                <button type="button" class="btn btn-light border border-secondary" aria-label="Left Align" title="Edit Registry">
+                                <span class="small" style="white-space: nowrap;">
+                                <i class="fas fa-pencil-alt"></i>
+                                Edit Registry</span>
+                                </button>
+                            </a>
+                          {% endif %}
+                          {% if cfg.purl_filename %}
+                            <a href="/edit/purl/{{ cfg.purl_filename }}">
+                                <button type="button" class="btn btn-light border border-secondary" aria-label="Left Align" title="Edit PURLs">
+                                <span class="small" style="white-space: nowrap;">
+                                <i class="fas fa-pencil-alt"></i>
+                                Edit PURLs</span>
+                                </button>
+                            </a>
+                          {% endif %}
+                        </div>
                     </td>
                     </tr>
                 {% endfor %}

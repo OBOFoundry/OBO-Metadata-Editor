@@ -19,12 +19,10 @@
 {% block content %}
 
   <h3>
-    {% if existing %}
-      Editing
-    {% else %}
-      Adding
-    {% endif %}
-    project configuration: {{ filename | upper | replace(".YML", "") }}</h3>
+    {% if existing %} Editing {% else %} Adding {% endif %}
+    {% if dev %} {{ editor_type | upper }} {% endif %}
+    {% set project_id = filename[ 0: filename.index(".") ] %}
+    project configuration: {{ project_id | upper }}</h3>
 
   <!-- Here is where the CodeMirror editor will live. This element is hidden but it will be used all
        the same to generate the CodeMirror editor.  -->
@@ -37,10 +35,10 @@
     </button>
     {% if existing %}
       <button id="update-btn" class="btn btn-danger"
-              onclick="update_config('{{ filename }}')" disabled>Submit update
+              onclick="update_config('{{ filename }}', '{{ editor_type }}')" disabled>Submit update
       </button>
     {% else %}
-      <button id="add-btn" class="btn btn-danger" onclick="add_config('{{ filename }}')" disabled>
+      <button id="add-btn" class="btn btn-danger" onclick="add_config('{{ filename }}', '{{ editor_type }}')" disabled>
         Add configuration
       </button>
     {% endif %}

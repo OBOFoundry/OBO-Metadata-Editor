@@ -18,7 +18,7 @@ pip install -r requirements.txt
 To obtain the values for the first two settings, send an email to james@overton.ca. For the value of `FLASK_SECRET_KEY`, a randomly generated string may be used.
 
 3. Edit the file `config.py` and make sure that the configuration settings are correct. Note in particular the settings for `FLASK_PORT`, `LOG_LEVEL`, `GITHUB_ORG`, `SCHEMAFILE`, and `ONTOLOGY_METADATA_URL`.
-- `LOG_LEVEL` should be set to one of: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` (_without_ quotes).
+- `LOG_LEVEL` should be set to one of: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` (_without_ quotes). Note that setting logging to DEBUG will only be effective if FLASK_ENV is set to `development` (the default is `production`)
 - `FLASK_PORT` should be set to the port on which the server will be listening.
 - `GITHUB_ORG` should be set to the organization or username that owns the repository. Normally it should be set to `OBOFoundry`.
 - `SCHEMAFILE` is the location of the jsonschema file that will be used to validate YAML code.
@@ -30,5 +30,6 @@ To obtain the values for the first two settings, send an email to james@overton.
 ```
 export FLASK_APP=server.py
 export FLASK_DEBUG=1 (optional)
+export FLASK_ENV=development (optional)
 python3 -m flask run
 ```

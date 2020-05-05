@@ -311,7 +311,7 @@ var validate = function(filename) {
 
   // Before doing anything else, make sure that the idspace indicated in the code matches the
   // idspace being edited:
-  var expected_idspace = filename.toUpperCase().replace(".YML", "");
+  var expected_idspace = filename.toUpperCase().substring(0, filename.lastIndexOf('.'));
   var actual_idspace = code.match(/[^\S\r\n]*idspace:[^\S\r\n]+(.+?)[^\S\r\n]*\n/m);
   if (!actual_idspace) {
     showAlertFor("Validation failed: \'idspace: \' is required", "alert-danger") ;
@@ -379,11 +379,11 @@ var validate = function(filename) {
 /**
  * Submit a pull request to github to add a new configuration to the repository.
  */
-var add_config = function(filename) {
+var add_config = function(filename, editor_type) {
   // Get a confirmation from the user:
   bootbox.prompt({
     title: "Please describe the new configuration you would like to add: " +
-      filename.toUpperCase().replace(".YML", ""),
+      filename.toUpperCase().substring(0, filename.lastIndexOf('.')),
     inputType: 'textarea',
     value: 'Adding ' + filename,
     buttons: {
@@ -444,7 +444,8 @@ var add_config = function(filename) {
         request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
         request.send('filename=' + filename +
                      '&commit_msg=' + commit_msg +
-                     '&code=' + encodeURIComponent(code))
+                     '&code=' + encodeURIComponent(code) +
+                     '&editor_type=' + editor_type)
         $("*").css("cursor", "progress");
       }
     }
@@ -455,11 +456,11 @@ var add_config = function(filename) {
 /**
  * Submit a pull request to github to update the given configuration file in the repository.
  */
-var update_config = function(filename) {
+var update_config = function(filename,editor_type) {
   // Get a confirmation from the user:
   bootbox.prompt({
-    title: "Please describe the changes you have made to " +
-      filename.toUpperCase().replace(".YML", ""),
+    title: "You are about to submit changes. Please describe the changes you have made to " +
+      filename.toUpperCase().substring(0, filename.lastIndexOf('.')),
     inputType: 'textarea',
     value: 'Updating ' + filename,
     buttons: {
@@ -520,7 +521,8 @@ var update_config = function(filename) {
         request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
         request.send('filename=' + filename +
                      '&commit_msg=' + commit_msg +
-                     '&code=' + encodeURIComponent(code))
+                     '&code=' + encodeURIComponent(code) +
+                     '&editor_type='+editor_type)
         $("*").css("cursor", "progress");
       }
     }
