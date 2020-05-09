@@ -51,17 +51,12 @@ logger.setLevel(app.config["LOG_LEVEL"])
 # The filesystem directory where this script is running from:
 pwd = app.config["PWD"]
 
-# Load the validation schema:
-purl_schema = json.load(open(app.config["PURL_SCHEMA"]))
-
 # Setup github-flask through which we'll communicate with the GitHub API:
 github = GitHub(app)
 
 # Setup sqlalchemy to manage the database of logged in users:
 engine = create_engine(app.config["DATABASE_URI"])
-db_session = scoped_session(
-    sessionmaker(autocommit=False, autoflush=False, bind=engine)
-)
+db_session = scoped_session(sessionmaker(autocommit=False, autoflush=False, bind=engine))
 Base = declarative_base()
 Base.query = db_session.query_property()
 
@@ -86,17 +81,39 @@ editor_types = {
 try:
     ontology_md = urlopen(app.config["ONTOLOGY_METADATA_URL"])
     if ontology_md.getcode() == 200:
-        ontology_md = yaml.load(ontology_md.read(), Loader=yaml.SafeLoader)[
-            "ontologies"
-        ]
+        ontology_md = yaml.load(ontology_md.read(), Loader=yaml.SafeLoader)["ontologies"]
 except Exception as e:
     logger.error(f"Could not retrieve ontology metadata: {e}")
     ontology_md = {}
 
 
+# Load the PURL validation schema:
+try:
+    purl_schema_text = urlopen(app.config["PURL_SCHEMA"])
+    if purl_schema_text.getcode() == 200:
+        purl_schema = json.load(purl_schema_text)
+except Exception as e:
+    logger.error(f"Could not retrieve PURL schema: {e}")
+    purl_schema = {}
+
+# Load the set of REGISTRY validation schemas:
+try:
+    registry_schemas = {}
+    for schema_file in app.config["REGISTRY_SCHEMA_FILES"]:
+        schema_name = schema_file.replace(".json", "")
+        registry_schema_text = urlopen(app.config["REGISTRY_SCHEMA_DIR"] + schema_file)
+        if registry_schema_text.getcode() == 200:
+            registry_schema = json.load(registry_schema_text)
+            registry_schemas[schema_name] = registry_schema
+except Exception as e:
+    logger.error(f"Could not retrieve REGISTRY schema: {e}")
+    registry_schemas = {}
+
+
 class User(Base):
     """
-    Saved information for users that have been authenticated to the metadata editor. Note that this table
+    Saved information for users that have been authenticated to the metadata editor.
+    Note that this table
     preserves historical data (user records are not deleted when a user logs out)
     """
 
@@ -212,6 +229,7 @@ def verify_logged_in(fn):
     """
     Decorator used to make sure that the user is logged in
     """
+
     @functools.wraps(fn)
     def wrapped(*args, **kwargs):
         # If the user is not logged in, then redirect him to the "logged out" page:
@@ -293,9 +311,7 @@ def index():
     if dev:
         for registry_config in registry_configs:
             config_id = (
-                registry_config["name"]
-                .casefold()
-                .replace(app.config["MARKDOWN_EXT"], "")
+                registry_config["name"].casefold().replace(app.config["MARKDOWN_EXT"], "")
             )
             if config_id not in [c["id"] for c in configs]:
                 config_title = [o["title"] for o in ontology_md if o["id"] == config_id]
@@ -359,7 +375,8 @@ def edit_new():
             notfound=f"{github_org}/{github_repo} does not exist",
         )
 
-    # Generate some text to populate the editor initially with, based on the new project template, and
+    # Generate some text to populate the editor initially with, based on the
+    # new project template, and
     # then inject it into the jinja2 template for the metadata editor:
     yaml = app.config["NEW_PROJECT_TEMPLATE"].format(
         idspace_upper=project_id.upper(),
@@ -430,10 +447,11 @@ def validate():
 
     def get_error_start(code, start, block_label, item=-1):
         """
-        Given some YAML code and a line to begin searching from within it, then if no item is specified
-        this function returns the line number of the given block_label (a YAML directive of the form
-        '(- )label:') is returned. If an item number n is specified, then the line number corresponding
-        to the nth item within the block is returned instead (where items within a block in the form:
+        Given some YAML code and a line to begin searching from within it, then if
+        no item is specified this function returns the line number of the given block_label
+        (a YAML directive of the form '(- )label:') is returned. If an item number n is
+        specified, then the line number corresponding to the nth item within the block
+        is returned instead (where items within a block in the form:
         - item 1
         - item 2
         - etc.)
@@ -450,21 +468,19 @@ def validate():
         curr_item = 0
         block_start_found = False
         for i, line in enumerate(codelines):
-            # Check to see whether the current line contains the block label that we are looking for:
+            # Check to see whether the current line contains the block label we are looking for:
             matched = re.fullmatch(pattern, line)
             if matched:
                 block_start_found = True
                 start = start + i
-                logger.debug(
-                    f"Found the start of the block: '{line}' at line {start+1}"
-                )
-                # If we have not been instructed to search for an item within the block, then we are done:
+                logger.debug(f"Found the start of the block: '{line}' at line {start+1}")
+                # If we've not been instructed to search for an item within the block, we're done:
                 if item < 0:
                     return start
             elif block_start_found and item >= 0:
-                # If the current line does not contain the block label, then if we have found it previously,
-                # and if we are to search for the nth item within the block, then do that. If this is the
-                # first item, then take note of the indentation level.
+                # If the current line does not contain the block label, then if we have found
+                # it previously, and if we are to search for the nth item within the block,
+                # then do that. If this is the first item, then take note of the indentation level.
                 matched = re.match(r"(\s*)-\s*\w+", line)
                 item_indent_level = len(matched.group(1)) if matched else None
                 if curr_item == 0:
@@ -473,8 +489,8 @@ def validate():
                 # Only consider items that fall directly under this block:
                 if item_indent_level == indent_level:
                     logger.debug(
-                        f"Found item #{curr_item + 1} of block: '{block_label}' at line {start + i + 1}. "
-                        f"Line is: '{line}'"
+                        f"Found item #{curr_item + 1} of block: '{block_label}' at"
+                        f" line {start + i + 1}. Line is: '{line}'"
                     )
                     # If we have found the nth item, return the line on which it starts:
                     if curr_item == item:
@@ -482,9 +498,7 @@ def validate():
                     # Otherwise continue looping:
                     curr_item += 1
 
-        logger.debug(
-            "*** Something went wrong while trying to find the line number ***"
-        )
+        logger.debug("*** Something went wrong while trying to find the line number ***")
         return start
 
     if request.form.get("code") is None:
@@ -578,8 +592,7 @@ def create_branch(repo, filename, master_sha):
     )
 
     response = github.post(
-        f"repos/{repo}/git/refs",
-        data={"ref": f"refs/heads/{branch}", "sha": master_sha},
+        f"repos/{repo}/git/refs", data={"ref": f"refs/heads/{branch}", "sha": master_sha},
     )
     if not response:
         raise Exception(f"Unable to create new branch {branch} in {repo}")
@@ -650,9 +663,7 @@ def add_config():
             filename,
             commit_msg,
         )
-        logger.info(
-            f"Committed addition of {filename} to branch {new_branch} in {repo}"
-        )
+        logger.info(f"Committed addition of {filename} to branch {new_branch} in {repo}")
         pr_info = create_pr(repo, new_branch, commit_msg)
         logger.info(f"Created a PR for branch {new_branch} in {repo}")
     except Exception as e:

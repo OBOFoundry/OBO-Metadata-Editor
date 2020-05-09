@@ -1,7 +1,7 @@
 import os
 import textwrap
 
-from logging import DEBUG, INFO, WARNING, ERROR, CRITICAL
+from logging import DEBUG
 
 
 # Logging related configuration:
@@ -31,10 +31,33 @@ YAML_EXT = ".yml"
 MARKDOWN_EXT = ".md"
 
 # The location of the PURL validation schema:
-PURL_SCHEMA = f"{PWD}/../purl.obolibrary.org/tools/config.schema.json"
+PURL_SCHEMA = (
+    f"https://github.com/{GITHUB_ORG}/{GITHUB_PURL_REPO}/raw/"
+    f"master/tools/config.schema.json"
+)
+# The location of the REGISTRY validations schemas (a directory)
+REGISTRY_SCHEMA_DIR = (
+    f"https://github.com/{GITHUB_ORG}/{GITHUB_FOUNDRY_REPO}/raw/master/util/schema/"
+)
+# Individual REGISTRY validation schema files
+REGISTRY_SCHEMA_FILES = [
+    "aberowl_id.json",
+    "activity_status.json",
+    "contact.json",
+    "description.json",
+    "homepage.json",
+    "id.json",
+    "license-lite.json",
+    "license.json",
+    "products.json",
+    "title.json",
+]
 
 # The URL where information (e.g. long names) about ontologies can be retrieved.
-ONTOLOGY_METADATA_URL = "https://github.com/OBOFoundry/OBOFoundry.github.io/raw/master/registry/ontologies.yml"
+ONTOLOGY_METADATA_URL = (
+    f"https://github.com/{GITHUB_ORG}/{GITHUB_FOUNDRY_REPO}/raw/"
+    f"master/registry/ontologies.yml"
+)
 
 # Used to help prevent CSRF attacks:
 FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
