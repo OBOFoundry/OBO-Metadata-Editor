@@ -6,3 +6,5 @@ pytest==3.6.0
 pyaml==16.12.2
 requests==2.22.0
 urllib3==1.25.7
+flake8==3.7.9
+black==19.10b0
