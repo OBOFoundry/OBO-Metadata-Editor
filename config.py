@@ -31,7 +31,7 @@ YAML_EXT = ".yml"
 MARKDOWN_EXT = ".md"
 
 # The location of the PURL validation schema:
-PURL_SCHEMA = "{}/../purl.obolibrary.org/tools/config.schema.json".format(PWD)
+PURL_SCHEMA = f"{PWD}/../purl.obolibrary.org/tools/config.schema.json"
 
 # The URL where information (e.g. long names) about ontologies can be retrieved.
 ONTOLOGY_METADATA_URL = \

@@ -70,7 +70,7 @@ try:
   if ontology_md.getcode() == 200:
     ontology_md = yaml.load(ontology_md.read(), Loader=yaml.SafeLoader)['ontologies']
 except Exception as e:
-  logger.error("Could not retrieve ontology metadata: {}".format(e))
+  logger.error(f"Could not retrieve ontology metadata: {e}")
   ontology_md = {}
 
 
@@ -134,7 +134,7 @@ def authorized(access_token):
   next_url = request.args.get('next') or url_for('index')
 
   if access_token is None:
-    logger.warn("No access token received. Redirecting to {}".format(next_url))
+    logger.warn(f"No access token received. Redirecting to {next_url}")
     return redirect(next_url)
 
   # If this check fails then there may have been an attempted CSRF attack:
@@ -217,15 +217,15 @@ def index():
   Renders the index page of the application
   """
   # Get all of the available config files to edit:
-  purl_configs = github.get('repos/{}/{}/contents/{}'.format(app.config['GITHUB_ORG'],
-                            editor_types['purl']['repo'], editor_types['purl']['dir']))
+  purl_configs = github.get(f'repos/{app.config["GITHUB_ORG"]}/{editor_types["purl"]["repo"]}/' 
+                            f'contents/{editor_types["purl"]["dir"]}')
   if not purl_configs:
     raise Exception("Could not get contents of the purl config directory")
 
   if dev:
     # Get all of the available registry config files to edit:
-    registry_configs = github.get('repos/{}/{}/contents/{}'.format(app.config['GITHUB_ORG'],
-                                  editor_types['registry']['repo'],editor_types['registry']['dir']))
+    registry_configs = github.get(f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/'
+                                  f'contents/{editor_types["registry"]["dir"]}')
     if not registry_configs:
       raise Exception("Could not get contents of the registry config directory")
 
@@ -291,14 +291,14 @@ def edit_new():
 
   # Make sure that the requested github organisation/repository combination actually exists:
   try:
-    github.get('repos/{}/{}'.format(github_org, github_repo))
+    github.get(f'repos/{github_org}/{github_repo}')
   except GitHubError:
     return render_template('prepare_new_config.jinja2',
                            login=g.user.github_login,
                            project_id=project_id,
                            github_org=github_org,
                            github_repo=github_repo,
-                           notfound='{}/{} does not exist'.format(github_org, github_repo))
+                           notfound=f'{github_org}/{github_repo} does not exist')
 
   # Generate some text to populate the editor initially with, based on the new project template, and
   # then inject it into the jinja2 template for the metadata editor:
@@ -307,7 +307,7 @@ def edit_new():
     org=github_org, git=github_repo)
 
   return render_template('editor.jinja2',
-                         filename='{}{}'.format(project_id.lower(),app.config["YAML_EXT"]),
+                         filename=f'{project_id.lower()}{app.config["YAML_EXT"]}',
                          existing=False,
                          yaml=yaml,
                          login=g.user.github_login)
@@ -332,15 +332,13 @@ def edit_config(editor_type, filename):
   and render it in the editor using the jinja2 template for the metadata editor
   """
   if editor_type not in editor_types.keys():
-    raise Exception("Unknown metadata type: {}".format(editor_type))
+    raise Exception(f"Unknown metadata type: {editor_type}")
 
   config_file = github.get(
-      'repos/{}/{}/contents/{}/{}'.format(app.config['GITHUB_ORG'],
-                                          editor_types[editor_type]['repo'],
-                                          editor_types[editor_type]['dir'],
-                                          filename))
+      f'repos/{app.config["GITHUB_ORG"]}/{editor_types[editor_type]["repo"]}/'
+      f'contents/{editor_types[editor_type]["dir"]}/{filename}')
   if not config_file:
-    raise Exception("Could not get the contents of: {}".format(filename))
+    raise Exception(f"Could not get the contents of: {filename}")
 
   decodedBytes = base64.b64decode(config_file['content'])
   decodedStr = str(decodedBytes, "utf-8")
@@ -372,10 +370,8 @@ def validate():
     - item 2
     - etc.)
     """
-    logger.debug("Searching from line {line} for{item}block: '{block}'"
-                 .format(line=start + 1,
-                         item=' item #{} of '.format(item + 1) if item >= 0 else ' ',
-                         block=block_label))
+    item = f' item #{item + 1} of ' if item >= 0 else ' '
+    logger.debug(f"Searching from line {start+1} for{item}block: '{block_label}'")
     # Split the long code string into individual lines, and discard everything before `start`:
     codelines = code.splitlines()[start:]
     # Lines containing block labels will always be of this form:
@@ -391,7 +387,7 @@ def validate():
       if matched:
         block_start_found = True
         start = start + i
-        logger.debug("Found the start of the block: '{}' at line {}".format(line, start + 1))
+        logger.debug(f"Found the start of the block: '{line}' at line {start+1}")
         # If we have not been instructed to search for an item within the block, then we are done:
         if item < 0:
           return start
@@ -406,8 +402,8 @@ def validate():
 
         # Only consider items that fall directly under this block:
         if item_indent_level == indent_level:
-          logger.debug("Found item #{} of block: '{}' at line {}. Line is: '{}'"
-                       .format(curr_item + 1, block_label, start + i + 1, line))
+          logger.debug(f"Found item #{curr_item + 1} of block: '{block_label}' at line {start + i + 1}. "
+                       f"Line is: '{line}'")
           # If we have found the nth item, return the line on which it starts:
           if curr_item == item:
             return start + i
@@ -431,7 +427,7 @@ def validate():
             400)
   except jsonschema.exceptions.ValidationError as err:
     error_summary = err.schema.get('description') or err.message
-    logger.debug("Determining line number for error: {}".format(list(err.absolute_path)))
+    logger.debug(f"Determining line number for error: {list(err.absolute_path)}")
     start = 0
     if not err.absolute_path:
       return (jsonify({'summary': format(error_summary),
@@ -443,10 +439,10 @@ def validate():
         if type(component) is str:
           block_label = component
           start = get_error_start(code, start, block_label)
-          logger.debug("Error begins at line {}".format(start + 1))
+          logger.debug(f"Error begins at line {start + 1}")
         elif type(component) is int:
           start = get_error_start(code, start, block_label, component)
-          logger.debug("Error begins at line {}".format(start + 1))
+          logger.debug(f"Error begins at line {start + 1}")
 
     return (jsonify({'summary': format(error_summary),
                      'line_number': start + 1,
@@ -460,10 +456,9 @@ def get_file_sha(repo, rep_dir, filename):
   """
   Get the sha of the given filename from the given github repository
   """
-  response = github.get('repos/{}/contents/{}/{}'.format(repo, rep_dir, filename))
+  response = github.get(f'repos/{repo}/contents/{rep_dir}/{filename}')
   if not response or 'sha' not in response:
-    raise Exception("Unable to get the current SHA value for {} in {}/{}"
-                    .format(filename, repo, rep_dir))
+    raise Exception(f"Unable to get the current SHA value for {filename} in {repo}/{rep_dir}")
   return response['sha']
 
 
@@ -471,9 +466,9 @@ def get_master_sha(repo):
   """
   Get the sha for the HEAD of the master branch in the given github repository
   """
-  response = github.get('repos/{}/git/ref/heads/master'.format(repo))
+  response = github.get(f'repos/{repo}/git/ref/heads/master')
   if not response or 'object' not in response or 'sha' not in response['object']:
-    raise Exception("Unable to get SHA for HEAD of master in {}".format(repo))
+    raise Exception(f"Unable to get SHA for HEAD of master in {repo}")
   return response['object']['sha']
 
 
@@ -483,15 +478,13 @@ def create_branch(repo, filename, master_sha):
   in the given repository.
   """
   # Generate the branch name:
-  branch = "{login}_{idspace}_{utc}".format(
-    login=g.user.github_login,
-    idspace=filename.replace(app.config["YAML_EXT"], "").upper(),
-    utc=datetime.utcnow().strftime("%Y-%m-%d_%H%M%S"))
+  branch = f"{g.user.github_login}_{filename.replace(app.config['YAML_EXT'], '').upper()}" \
+           f"_{datetime.utcnow().strftime('%Y-%m-%d_%H%M%S')}"
 
-  response = github.post('repos/{}/git/refs'.format(repo),
-                         data={'ref': 'refs/heads/' + branch, 'sha': master_sha})
+  response = github.post(f'repos/{repo}/git/refs',
+                         data={'ref': f'refs/heads/{branch}', 'sha': master_sha})
   if not response:
-    raise Exception("Unable to create new branch {} in {}".format(branch, repo))
+    raise Exception(f"Unable to create new branch {branch} in {repo}")
 
   return branch
 
@@ -509,22 +502,21 @@ def commit_to_branch(repo, branch, code, rep_dir, filename, commit_msg, file_sha
   if file_sha:
     data['sha'] = file_sha
 
-  response = github.put('repos/{}/contents/{}/{}'.format(repo, rep_dir, filename), data=data)
+  response = github.put(f'repos/{repo}/contents/{rep_dir}/{filename}', data=data)
   if not response:
-    raise Exception("Unable to commit addition of {} to branch {} in {}"
-                    .format(filename, branch, repo))
+    raise Exception(f"Unable to commit addition of {filename} to branch {branch} in {repo}")
 
 
 def create_pr(repo, branch, commit_msg):
   """
   Create a pull request for the given branch in the given repository in github
   """
-  response = github.post('repos/{}/pulls'.format(repo),
+  response = github.post(f'repos/{repo}/pulls',
                          data={'title': commit_msg,
                                'head': branch,
                                'base': 'master'})
   if not response:
-    raise Exception("Unable to create PR for branch {} in {}".format(branch, repo))
+    raise Exception(f"Unable to create PR for branch {branch} in {repo}")
 
   return response
 
@@ -542,16 +534,16 @@ def add_config():
   if any([item is None for item in [filename, commit_msg, code, editor_type]]):
     return Response("Malformed POST request", status=400)
 
-  repo = '{}/{}'.format(app.config['GITHUB_ORG'], editor_types[editor_type]['repo'])
+  repo = f'{app.config["GITHUB_ORG"]}/{editor_types[editor_type]["repo"]}'
 
   try:
     master_sha = get_master_sha(repo)
     new_branch = create_branch(repo, filename, master_sha)
-    logger.info("Created a new branch: {} in {}".format(new_branch, repo))
+    logger.info(f"Created a new branch: {new_branch} in {repo}")
     commit_to_branch(repo, new_branch, code, editor_types[editor_type]['dir'], filename, commit_msg)
-    logger.info("Committed addition of {} to branch {} in {}".format(filename, new_branch, repo))
+    logger.info(f"Committed addition of {filename} to branch {new_branch} in {repo}")
     pr_info = create_pr(repo, new_branch, commit_msg)
-    logger.info("Created a PR for branch {} in {}".format(new_branch, repo))
+    logger.info(f"Created a PR for branch {new_branch} in {repo}")
   except Exception as e:
     return Response(format(e), status=400)
 
@@ -575,11 +567,10 @@ def update_config():
     return Response("Malformed POST request", status=400)
 
   # Get the contents of the current version of the file:
-  curr_contents = github.get('repos/{}/{}/contents/{}/{}'
-                             .format(app.config['GITHUB_ORG'], editor_types[editor_type]['repo'],
-                                     editor_types[editor_type]['dir'], filename))
+  curr_contents = github.get(f'repos/{app.config["GITHUB_ORG"]}/{editor_types[editor_type]["repo"]}/'
+                             f'contents/{editor_types[editor_type]["dir"]}/{filename}')
   if not curr_contents:
-    raise Exception("Could not get the contents of: {}".format(filename))
+    raise Exception(f"Could not get the contents of: {filename}")
 
   decodedBytes = base64.b64decode(curr_contents['content'])
   decodedStr = str(decodedBytes, "utf-8")
@@ -590,17 +581,17 @@ def update_config():
     return Response("Update request refused: The submitted configuration is identical to the "
                     "currently saved version.", status=422)
 
-  repo = '{}/{}'.format(app.config['GITHUB_ORG'], editor_types[editor_type]['repo'])
+  repo = f'{app.config["GITHUB_ORG"]}/{editor_types[editor_type]["repo"]}'
 
   try:
     file_sha = get_file_sha(repo, editor_types[editor_type]['dir'], filename)
     master_sha = get_master_sha(repo)
     new_branch = create_branch(repo, filename, master_sha)
-    logger.info("Created a new branch: {} in {}".format(new_branch, repo))
+    logger.info(f"Created a new branch: {new_branch} in {repo}")
     commit_to_branch(repo, new_branch, code, editor_types[editor_type]['dir'], filename, commit_msg, file_sha)
-    logger.info("Committed update of {} to branch {} in {}".format(filename, new_branch, repo))
+    logger.info(f"Committed update of {filename} to branch {new_branch} in {repo}")
     pr_info = create_pr(repo, new_branch, commit_msg)
-    logger.info("Created a PR for branch {} in {}".format(new_branch, repo))
+    logger.info(f"Created a PR for branch {new_branch} in {repo}")
   except Exception as e:
     return Response(format(e), status=400)
 
