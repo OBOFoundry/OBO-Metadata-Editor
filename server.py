@@ -113,8 +113,8 @@ except Exception as e:
 class User(Base):
     """
     Saved information for users that have been authenticated to the metadata editor.
-    Note that this table
-    preserves historical data (user records are not deleted when a user logs out)
+    Note that this table preserves historical data (user records are not deleted
+    when a user logs out)
     """
 
     __tablename__ = "users"
@@ -375,9 +375,8 @@ def edit_new():
             notfound=f"{github_org}/{github_repo} does not exist",
         )
 
-    # Generate some text to populate the editor initially with, based on the
-    # new project template, and
-    # then inject it into the jinja2 template for the metadata editor:
+    # Generate some text to populate the editor initially with, based on the new project template,
+    # and then inject it into the jinja2 template for the metadata editor:
     yaml = app.config["NEW_PROJECT_TEMPLATE"].format(
         idspace_upper=project_id.upper(),
         idspace_lower=project_id.casefold(),
@@ -447,11 +446,11 @@ def validate():
 
     def get_error_start(code, start, block_label, item=-1):
         """
-        Given some YAML code and a line to begin searching from within it, then if
-        no item is specified this function returns the line number of the given block_label
-        (a YAML directive of the form '(- )label:') is returned. If an item number n is
-        specified, then the line number corresponding to the nth item within the block
-        is returned instead (where items within a block in the form:
+        Given some YAML code and a line to begin searching from within it, then if no item is
+        specified this function returns the line number of the given block_label (a YAML directive
+        of the form '(- )label:') is returned. If an item number n is specified, then the line
+        number corresponding to the nth item within the block is returned instead (where items
+        within a block in the form:
         - item 1
         - item 2
         - etc.)
@@ -478,9 +477,9 @@ def validate():
                 if item < 0:
                     return start
             elif block_start_found and item >= 0:
-                # If the current line does not contain the block label, then if we have found
-                # it previously, and if we are to search for the nth item within the block,
-                # then do that. If this is the first item, then take note of the indentation level.
+                # If the current line does not contain the block label, then if we have found it
+                # previously, and if we are to search for the nth item within the block, then
+                # do that. If this is the first item, then take note of the indentation level.
                 matched = re.match(r"(\s*)-\s*\w+", line)
                 item_indent_level = len(matched.group(1)) if matched else None
                 if curr_item == 0:
@@ -489,8 +488,8 @@ def validate():
                 # Only consider items that fall directly under this block:
                 if item_indent_level == indent_level:
                     logger.debug(
-                        f"Found item #{curr_item + 1} of block: '{block_label}' at"
-                        f" line {start + i + 1}. Line is: '{line}'"
+                        f"Found item #{curr_item + 1} of block: '{block_label}' at "
+                        f"line {start + i + 1}. Line is: '{line}'"
                     )
                     # If we have found the nth item, return the line on which it starts:
                     if curr_item == item:
@@ -506,8 +505,31 @@ def validate():
 
     try:
         code = request.form["code"]
-        yaml_source = yaml.load(code, Loader=yaml.SafeLoader)
-        jsonschema.validate(yaml_source, purl_schema)
+        editor_type = request.form["editor_type"]
+        if editor_type == "purl":
+            yaml_source = yaml.load(code, Loader=yaml.SafeLoader)
+            jsonschema.validate(yaml_source, purl_schema)
+        elif editor_type == "registry":
+            results = {}
+            split_pattern = "---"
+            code_sections = re.split(split_pattern, code)
+            if len(code_sections) < 2:
+                logger.debug(f"Not enough sub-sections in registry config code {code}")
+                return Response(
+                    f"Not enough sub-sections in registry config "
+                    f"file code: {len(code_sections)}",
+                    status=400,
+                )
+            yaml_code = code_sections[1]
+            yaml_source = yaml.load(yaml_code, Loader=yaml.SafeLoader)
+            for s in registry_schemas.values():
+                title = s["title"]
+                jsonschema.validate(yaml_source, s)
+                results[title] = "pass"
+            logger.debug(f"REGISTRY schema validation results: {results}")
+        else:
+            return Response(f"Unknown editor type: {editor_type}", status=400)
+
     except (yaml.YAMLError, TypeError) as err:
         return (
             jsonify(

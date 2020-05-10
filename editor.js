@@ -299,7 +299,7 @@ var purlYamlHint = function(editor, options) {
 /**
  * Validates the contents of the editor, displaying the validation result in the status area.
  */
-var validate = function(filename) {
+var validate = function(filename, editor_type) {
   // Save the contents of the editor to its associated text area:
   editor.save();
 
@@ -311,16 +311,24 @@ var validate = function(filename) {
 
   // Before doing anything else, make sure that the idspace indicated in the code matches the
   // idspace being edited:
-  var expected_idspace = filename.toUpperCase().substring(0, filename.lastIndexOf('.'));
-  var actual_idspace = code.match(/[^\S\r\n]*idspace:[^\S\r\n]+(.+?)[^\S\r\n]*\n/m);
+  if (editor_type == 'registry') {
+     var idspace_name = 'id';
+     var expected_idspace = filename.substring(0, filename.lastIndexOf('.'));
+     var actual_idspace = code.match(/[^\S\r\n]*id:[^\S\r\n]+(.+?)[^\S\r\n]*\n/m);
+  }
+  if (editor_type == 'purl') {
+     var idspace_name = 'idspace';
+     var expected_idspace = filename.substring(0, filename.lastIndexOf('.')).toUpperCase();
+     var actual_idspace = code.match(/[^\S\r\n]*idspace:[^\S\r\n]+(.+?)[^\S\r\n]*\n/m);
+  }
   if (!actual_idspace) {
-    showAlertFor("Validation failed: \'idspace: \' is required", "alert-danger") ;
+    showAlertFor("Validation failed: \'" + idspace_name + ": \' is required", "alert-danger") ;
     get_commit_btn().disabled = true;
     return;
   }
   else if (actual_idspace[1] !== expected_idspace) {
-    showAlertFor("Validation failed: \'idspace: " + actual_idspace[1] +
-      "\' does not match expected idspace: \'" + expected_idspace + "\'", "alert-danger")  ;
+    showAlertFor("Validation failed: \'" + idspace_name + ": " + actual_idspace[1] +
+      "\' does not match the expected value: \'" + expected_idspace + "\'", "alert-danger")  ;
     get_commit_btn().disabled = true;
     return;
   }
@@ -371,7 +379,8 @@ var validate = function(filename) {
   }
   request.open('POST', '/validate', true);
   request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
-  request.send("code=" + encodeURIComponent(code));
+  request.send("code=" + encodeURIComponent(code) +
+               "&editor_type=" + editor_type);
   $("*").css("cursor", "progress");
 };
 
