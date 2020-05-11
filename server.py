@@ -456,8 +456,8 @@ def validate():
         - item 2
         - etc.)
         """
-        item = f" item #{item + 1} of " if item >= 0 else " "
-        logger.debug(f"Searching from line {start+1} for{item}block: '{block_label}'")
+        block_no = f" item #{item + 1} of " if item >= 0 else " "
+        logger.debug(f"Searching from line {start+1} for{block_no}block: '{block_label}'")
         # Split the long code string into individual lines, and discard everything before `start`:
         codelines = code.splitlines()[start:]
         # Lines containing block labels will always be of this form:
