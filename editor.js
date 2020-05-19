@@ -344,38 +344,62 @@ var validate = function(filename, editor_type) {
       if (!request.status) {
         showAlertFor("Problem communicating with server","alert-danger");
         get_commit_btn().disabled = true;
-      }
-      else if (request.status === 200) {
-        showAlertFor("Validation successful", "alert-success") ;
-        get_commit_btn().disabled = false;
-      }
-      else {
-        // Display the error message in the status area. Note that we must replace any angle
-        // angle brackets with HTML escape codes.
-        var response = JSON.parse(request.responseText);
-        alertText = 'Validation failed';
-        alertText += response.line_number >= 0 ? ('. At line ' + response.line_number + ': ') : ': ';
-        alertText += response.summary + '\n';
-        alertText = alertText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        alertTextDetail = response.details + '\n';
-        alertTextDetail = alertTextDetail.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        showAlertFor(alertText,"alert-danger",alertTextDetail);
-        get_commit_btn().disabled = true;
-        // If the line number is valid, then add it to the message and highlight that line in the
-        // editor while scrolling it into view.
-        if (response.line_number >= 0) {
-          var marker = editor.markText({line: response.line_number - 1, ch: 0},
+      } else {
+         alertTextDetail = '';
+         try { //Parse JSON if possible, use "result type" to decide message
+            var response = JSON.parse(request.responseText);
+            if (response.result_type === 'error') {
+                alertText = 'Validation failed';
+                alertLevel = "alert-danger";
+                get_commit_btn().disabled = true;
+            } else if (response.result_type === 'warning') {
+                alertText = 'Warning';
+                alertLevel = "alert-warning";
+                get_commit_btn().disabled = false;
+            } else if (response.result_type === 'info') {
+                alertText = 'Information';
+                alertLevel = "alert-info";
+                get_commit_btn().disabled = false;
+            } else {
+                alertText='Unknown response type: ' + response.result_type;
+                alertLevel="alert-danger";
+                get_commit_btn().disabled = true;
+            }
+            // If the line number is valid, then add it to the message
+            if (response.line_number) {
+                alertText += response.line_number >= 0 ? ('. At line ' + response.line_number + ': ') : ': ';
+            }
+            // and highlight that line in the editor while scrolling it into view.
+            if (response.line_number >= 0) {
+                var marker = editor.markText({line: response.line_number - 1, ch: 0},
                                        {line: response.line_number, ch: 0},
                                        {className: "line-error", clearOnEnter: true});
 
-          editor.scrollIntoView(what={line: response.line_number, ch: 0}, margin=32);
+                editor.scrollIntoView(what={line: response.line_number, ch: 0}, margin=32);
 
-          // Clear the highlighting after 5000ms:
-          setTimeout(function() {
-            marker.clear();
-          }, 5000);
-
+                // Clear the highlighting after 5000ms:
+                setTimeout(function() {
+                    marker.clear();
+                }, 5000);
+            }
+            //Show additional error details in the message
+            if (response.details) {
+                alertText += response.summary + '\n';
+                alertTextDetail = response.details + '\n';
+            }
+        } catch (err) {
+            // No JSON information, just use the HTTP status to decide what to do
+            if (request.status === 200) {
+                alertText = "Validation successful";
+                alertLevel = "alert-success";
+                get_commit_btn().disabled = false;
+            } else if (request.status === 400) {
+                alertText = 'Validation failed';
+                alertLevel = "alert-danger";
+                get_commit_btn().disabled = true;
+            }
         }
+        showAlertFor(alertText,alertLevel,alertTextDetail);
       }
     }
   }
