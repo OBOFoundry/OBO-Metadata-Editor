@@ -58,6 +58,17 @@ $(document).ready(function(){
   });
 });
 
+let hasChanged = false;
+/**
+ * Handler to show popup when you leave the page, only if the code editor has unsaved changes.
+ */
+window.addEventListener('beforeunload', (event) => {
+  if (hasChanged) {
+    event.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+  }
+});
+
+
 /**
  * Applies a particular search value to filter the ontologies table
  */
@@ -149,18 +160,9 @@ if (document.getElementById("code")) {
    */
   editor.on("changes", function() {
     get_commit_btn().disabled = true;
+    hasChanged = true;
     editor.scrollIntoView(what={line: editor.getCursor().line, ch: 0}, margin=12);
   });
-
-
-  /**
-   * Disable the commit button if the user refreshes or otherwise leaves the page,
-   * and ask the user to confirm.
-   */
-  window.onbeforeunload = function() {
-    get_commit_btn().disabled = true;
-    return "Do you really want to leave this page? Your edits will not be saved.";
-  }
 }
 
 
@@ -429,6 +431,7 @@ var add_config = function(filename, editor_type) {
                 'reviewed by a moderator before being added to the repository. Click ' +
                 '<a href="' + prInfo['html_url'] + '" target="__blank">here</a> to view your ' +
                 'pull request on GitHub.',"alert-success");
+              hasChanged = false;
             }
             else {
               // Display the error message in the status area. Note that we must replace any angle
@@ -506,6 +509,7 @@ var update_config = function(filename,editor_type) {
                 'reviewed by a moderator before being added to the repository. Click ' +
                 '<a href="' + prInfo['html_url'] + '" target="__blank">here</a> to view your ' +
                 'pull request on GitHub.',"alert-success");
+              hasChanged = false;
             }
             else {
               // Display the error message in the status area. Note that we must replace any angle
