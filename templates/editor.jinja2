@@ -30,7 +30,7 @@
   <textarea id="code" class="hidden">{% if yaml is defined %}{{ yaml }}{% endif %}</textarea>
 
   <div>
-    <button id="validate-btn" class="btn btn-primary" onclick="validate('{{ filename }}')">
+    <button id="validate-btn" class="btn btn-primary" onclick="validate('{{ filename }}', '{{ editor_type }}')">
       Validate
     </button>
     {% if existing %}

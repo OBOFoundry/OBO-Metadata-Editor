@@ -301,7 +301,7 @@ var purlYamlHint = function(editor, options) {
 /**
  * Validates the contents of the editor, displaying the validation result in the status area.
  */
-var validate = function(filename) {
+var validate = function(filename, editor_type) {
   // Save the contents of the editor to its associated text area:
   editor.save();
 
@@ -313,16 +313,24 @@ var validate = function(filename) {
 
   // Before doing anything else, make sure that the idspace indicated in the code matches the
   // idspace being edited:
-  var expected_idspace = filename.toUpperCase().substring(0, filename.lastIndexOf('.'));
-  var actual_idspace = code.match(/[^\S\r\n]*idspace:[^\S\r\n]+(.+?)[^\S\r\n]*\n/m);
+  if (editor_type == 'registry') {
+     var idspace_name = 'id';
+     var expected_idspace = filename.substring(0, filename.lastIndexOf('.'));
+     var actual_idspace = code.match(/[^\S\r\n]*id:[^\S\r\n]+(.+?)[^\S\r\n]*\n/m);
+  }
+  if (editor_type == 'purl') {
+     var idspace_name = 'idspace';
+     var expected_idspace = filename.substring(0, filename.lastIndexOf('.')).toUpperCase();
+     var actual_idspace = code.match(/[^\S\r\n]*idspace:[^\S\r\n]+(.+?)[^\S\r\n]*\n/m);
+  }
   if (!actual_idspace) {
-    showAlertFor("Validation failed: \'idspace: \' is required", "alert-danger") ;
+    showAlertFor("Validation failed: \'" + idspace_name + ": \' is required", "alert-danger") ;
     get_commit_btn().disabled = true;
     return;
   }
   else if (actual_idspace[1] !== expected_idspace) {
-    showAlertFor("Validation failed: \'idspace: " + actual_idspace[1] +
-      "\' does not match expected idspace: \'" + expected_idspace + "\'", "alert-danger")  ;
+    showAlertFor("Validation failed: \'" + idspace_name + ": " + actual_idspace[1] +
+      "\' does not match the expected value: \'" + expected_idspace + "\'", "alert-danger")  ;
     get_commit_btn().disabled = true;
     return;
   }
@@ -336,44 +344,69 @@ var validate = function(filename) {
       if (!request.status) {
         showAlertFor("Problem communicating with server","alert-danger");
         get_commit_btn().disabled = true;
-      }
-      else if (request.status === 200) {
-        showAlertFor("Validation successful", "alert-success") ;
-        get_commit_btn().disabled = false;
-      }
-      else {
-        // Display the error message in the status area. Note that we must replace any angle
-        // angle brackets with HTML escape codes.
-        var response = JSON.parse(request.responseText);
-        alertText = 'Validation failed';
-        alertText += response.line_number >= 0 ? ('. At line ' + response.line_number + ': ') : ': ';
-        alertText += response.summary + '\n';
-        alertText = alertText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        alertTextDetail = response.details + '\n';
-        alertTextDetail = alertTextDetail.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        showAlertFor(alertText,"alert-danger",alertTextDetail);
-        get_commit_btn().disabled = true;
-        // If the line number is valid, then add it to the message and highlight that line in the
-        // editor while scrolling it into view.
-        if (response.line_number >= 0) {
-          var marker = editor.markText({line: response.line_number - 1, ch: 0},
+      } else {
+         alertTextDetail = '';
+         try { //Parse JSON if possible, use "result type" to decide message
+            var response = JSON.parse(request.responseText);
+            if (response.result_type === 'error') {
+                alertText = 'Validation failed';
+                alertLevel = "alert-danger";
+                get_commit_btn().disabled = true;
+            } else if (response.result_type === 'warning') {
+                alertText = 'Warning';
+                alertLevel = "alert-warning";
+                get_commit_btn().disabled = false;
+            } else if (response.result_type === 'info') {
+                alertText = 'Information';
+                alertLevel = "alert-info";
+                get_commit_btn().disabled = false;
+            } else {
+                alertText='Unknown response type: ' + response.result_type;
+                alertLevel="alert-danger";
+                get_commit_btn().disabled = true;
+            }
+            // If the line number is valid, then add it to the message
+            if (response.line_number) {
+                alertText += response.line_number >= 0 ? ('. At line ' + response.line_number + ': ') : ': ';
+            }
+            // and highlight that line in the editor while scrolling it into view.
+            if (response.line_number >= 0) {
+                var marker = editor.markText({line: response.line_number - 1, ch: 0},
                                        {line: response.line_number, ch: 0},
                                        {className: "line-error", clearOnEnter: true});
 
-          editor.scrollIntoView(what={line: response.line_number, ch: 0}, margin=32);
+                editor.scrollIntoView(what={line: response.line_number, ch: 0}, margin=32);
 
-          // Clear the highlighting after 5000ms:
-          setTimeout(function() {
-            marker.clear();
-          }, 5000);
-
+                // Clear the highlighting after 5000ms:
+                setTimeout(function() {
+                    marker.clear();
+                }, 5000);
+            }
+            //Show additional error details in the message
+            if (response.details) {
+                alertText += response.summary + '\n';
+                alertTextDetail = response.details + '\n';
+            }
+        } catch (err) {
+            // No JSON information, just use the HTTP status to decide what to do
+            if (request.status === 200) {
+                alertText = "Validation successful";
+                alertLevel = "alert-success";
+                get_commit_btn().disabled = false;
+            } else if (request.status === 400) {
+                alertText = 'Validation failed';
+                alertLevel = "alert-danger";
+                get_commit_btn().disabled = true;
+            }
         }
+        showAlertFor(alertText,alertLevel,alertTextDetail);
       }
     }
   }
   request.open('POST', '/validate', true);
   request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
-  request.send("code=" + encodeURIComponent(code));
+  request.send("code=" + encodeURIComponent(code) +
+               "&editor_type=" + editor_type);
   $("*").css("cursor", "progress");
 };
 
