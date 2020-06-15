@@ -496,7 +496,7 @@ def new_foundry():
             "new_foundry_reg.jinja2",
             login=g.user.github_login,
             resultType=resultType,
-            errorMessage=f"The ID space {idSpace} is already in use. Please try "
+            errorMessage=f"The ID space '{idSpace}' is already in use. Please try "
             f"a different option. ",
             ontologyTitle=ontologyTitle,
             idSpace=idSpace,
