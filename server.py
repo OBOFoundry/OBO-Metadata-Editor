@@ -376,7 +376,7 @@ def edit_new():
 
     # Generate some text to populate the editor initially with, based on the new project template,
     # and then inject it into the jinja2 template for the metadata editor:
-    yaml = app.config["NEW_PROJECT_TEMPLATE"].format(
+    yaml = app.config["NEW_PROJECT_PURL_TEMPLATE"].format(
         idspace_upper=project_id.upper(),
         idspace_lower=project_id.casefold(),
         org=github_org,
