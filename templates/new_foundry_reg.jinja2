@@ -1,0 +1,251 @@
+{% extends "base.jinja2" %}
+
+{% block content %}
+
+  <h4>Request a new OBO Foundry ontology</h4>
+
+  {% if ( resultType ) and ( resultType == 'success' ) %}
+    <div class="alert alert-success" role="alert">
+    Your Foundry registration request has been successfully logged as an
+      <a href="{{issueURL}}" target="_blank">issue</a> in the Foundry repository.
+    </div>
+
+    <p>
+      The next step in the registration of a new Foundry ontology is to send an email to the
+      <strong>OBO Discuss</strong> mailing list, announcing the request for your new ontology.
+    </p>
+
+
+  <div class="col-sm-12 bg-light border">
+    <form action="mailto:obo-discuss@googlegroups.com" method="GET">
+        <div class="form-group">
+            <label for="subject">Message title</label>
+            <input type="text" class="form-control" name="subject" id="subject"
+                   value="Request for '{{idSpace}}' namespace for ontology '{{ontologyTitle}}'" required>
+        </div>
+        <div class="form-group">
+            <label for="body">Message body</label>
+            <textarea class="form-control" name="body" id="body"
+                      rows="15">{{emailDraft}}</textarea>
+          </div>
+      <button type="submit" class="btn btn-primary mb-2">Send Email</button>
+    </form>
+  </div>
+
+  {% elif ( not resultType ) or ( resultType == 'failure' )   %}
+
+    {% if resultType == 'failure' %}
+
+      <div class="alert alert-danger" role="alert">
+        <p>Your submission of a new ontology registration request was not successful.</p>
+
+        <p>An error occurred: <strong> {{ errorMessage }} </strong> </p>
+      </div>
+
+    {% endif %}
+
+  <div class="col-sm-12 bg-light border">
+    <form action="/foundry_reg" method="POST">
+      <div class="row p-2"> </div>
+      <div class="row">
+        <div class="col-sm-12">
+          <div class="form-group">
+            <label for="ontologyTitle">Ontology title</label>
+            <input type="text" class="form-control" name="ontologyTitle" id="ontologyTitle"
+                   aria-describedby="titleHelp"
+                   {% if ontologyTitle %} value="{{ ontologyTitle }}" {% endif %}
+                   required>
+            <small id="titleHelp" class="form-text text-muted">Concise title of your ontology
+              (e.g, "Gene Ontology")</small>
+          </div>
+          <div class="form-group">
+            <label for="idSpace">Requested ID space</label>
+            <input type="text" class="form-control" name="idSpace" id="idSpace"
+                   aria-describedby="idSpaceHelp"
+                   {% if idSpace %} value="{{ idSpace }}" {% endif %}
+                   required>
+            <small id="idSpaceHelp" class="form-text text-muted">Prefix of ontology in lowercase
+              (e.g., go, uberon, chebi, cl). The OBO Foundry
+              ID policy is described at <a href="http://obofoundry.org/id-policy.html">
+              http://obofoundry.org/id-policy.html</a>.</small>
+          </div>
+          <div class="form-group">
+            <label for="ontoLoc">Ontology location</label>
+            <input type="text" class="form-control" name="ontoLoc" id="ontoLoc"
+                   aria-describedby="ontoLocHelp"
+                   {% if ontoLoc %} value="{{ ontoLoc }}" {% endif %}
+                   required>
+            <small id="ontoLocHelp" class="form-text text-muted">Home page or URL of ontology.
+              This can be a GitHub URL.</small>
+          </div>
+          <div class="form-group">
+            <label for="issueTracker">Issue tracker</label>
+            <input type="text" class="form-control" name="issueTracker" id="issueTracker"
+                   aria-describedby="trackerHelp"
+                   {% if issueTracker %} value="{{ issueTracker }}" {% endif %}
+                   required>
+            <small id="trackerHelp" class="form-text text-muted">URL for submitting
+              and responding to suggestions, requests, etc. (e.g.,
+              <a href="https://github.com/geneontology/go-ontology/issues/">
+              https://github.com/geneontology/go-ontology/issues/</a>).</small>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-sm-4">
+          <div class="form-group">
+            <label for="contactPerson">Contact person name</label>
+            <input type="text" class="form-control" name="contactPerson" id="contactPerson"
+                   aria-describedby="contactPersonHelp"
+                   {% if contactPerson %} value="{{ contactPerson }}" {% endif %}
+                   required>
+            <small id="contactPersonHelp" class="form-text text-muted">Name of contact person.
+              </small>
+          </div>
+        </div>
+        <div class="col-sm-4">
+          <div class="form-group">
+            <label for="contactEmail">Contact email</label>
+            <input type="email" class="form-control" name="contactEmail" id="contactEmail"
+                   aria-describedby="contactEmailHelp"
+                   {% if contactEmail %} value="{{ contactEmail }}" {% endif %}
+                   required>
+            <small id="contactEmailHelp" class="form-text text-muted">Email address of contact
+              person.</small>
+          </div>
+        </div>
+        <div class="col-sm-4">
+          <div class="form-group">
+            <label for="contactGitHub">Contact GitHub username</label>
+            <input type="text" class="form-control" name="contactGitHub" id="contactGitHub"
+                   aria-describedby="contactGitHubHelp"
+                   {% if contactGitHub %} value="{{ contactGitHub }}" {% endif %}
+                   required>
+            <small id="contactGitHubHelp" class="form-text text-muted">GitHub username of
+              contact person.</small>
+          </div>
+        </div>
+      </div>
+      <div class="row pl-3 pb-3">
+          <small class="form-text text-muted">The OBO Foundry policy on contact persons is described at
+              <a href="http://obofoundry.org/principles/fp-011-locus-of-authority.html">
+                http://obofoundry.org/principles/fp-011-locus-of-authority.html</a></small>
+      </div>
+      <div class="row">
+        <div class="col-sm-12">
+            <div class="row pl-3">
+              <label for="ontoLicense1">Ontology license</label>
+            </div>
+            <div class="row pb-2">
+              <div class="col-sm-7">
+                  <div class="form-check small form-check-inline">
+                    <input class="form-check-input" type="radio" name="ontoLicense" id="ontoLicense1"
+                           value="CC-0"
+                           {% if not ontoLicense or ontoLicense=="CC-0" %}
+                           checked
+                           {% endif %}
+                    >
+                    <label class="form-check-label" for="ontoLicense2">
+                      CC0 (<a href="https://creativecommons.org/share-your-work/public-domain/cc0/">public domain</a>)
+                    </label>
+                  </div>
+                  <div class="form-check small form-check-inline">
+                    <input class="form-check-input" type="radio" name="ontoLicense" id="ontoLicense2"
+                         value="CC-BY"
+                           {% if ontoLicense and ontoLicense=="CC-BY" %}
+                            checked
+                           {% endif %}
+                    >
+                    <label class="form-check-label" for="ontoLicense1">
+                      CC-BY (<a href="https://creativecommons.org/licenses/by/4.0/">attribution</a>)
+                    </label>
+                  </div>
+                  <div class="form-check small form-check-inline">
+                    <input class="form-check-input" type="radio" name="ontoLicense" id="ontoLicense3"
+                           value="Other"
+                           {% if ontoLicense and not (ontoLicense=="CC-BY") and not (ontoLicense=="CC-0" ) %}
+                            checked
+                           {% endif %}
+                    >
+                    <label class="form-check-label" for="ontoLicense3">
+                      Other - please specify:
+                    </label>
+                  </div>
+                </div>
+                <div class="col-sm-5">
+                  <input type="text" class="form-control" name="ontoLicenseTxt" id="ontoLicenseTxt"
+                         aria-describedby="licenseHelp" style="display: inline"
+                  {% if ontoLicense and not (ontoLicense=="CC-BY") and not (ontoLicense=="CC-0" ) %}
+                            value="{{ontoLicense}}"
+                           {% endif %}
+                  >
+                </div>
+          </div>
+          <div class="row pb-3 pl-3 pr-3">
+              <small id="licenseHelp" class="form-text text-muted">Current license.
+              Note that the OBO Foundry accepts CC0 or CC-BY.
+              The OBO Foundry license policy is described at
+              <a href="http://www.obofoundry.org/principles/fp-001-open.html">
+              http://www.obofoundry.org/principles/fp-001-open.html</a>.</small>
+          </div>
+          <div class="form-group">
+            <label for="domain">What domain is the ontology intended to cover?</label>
+            <input type="text" class="form-control" name="domain" id="domain"
+                   aria-describedby="domainHelp"
+                   {% if domain %} value="{{ domain }}" {% endif %}
+                   required>
+            <small id="domainHelp" class="form-text text-muted">For example, the GO covers the
+              processes, functions and cellular locations of gene products. The OBO Foundry
+              policy on scope of an ontology is described at
+              <a href="http://obofoundry.org/principles/fp-005-delineated-content.html">
+              http://obofoundry.org/principles/fp-005-delineated-content.html</a>.</small>
+          </div>
+          <div class="form-group">
+            <label for="relatedOntos">Related OBO Foundry ontologies</label>
+            <textarea class="form-control" name="relatedOntos" id="relatedOntos"
+                      aria-describedby="relatedHelp" rows="2"
+                      required>{% if relatedOntos %}{{relatedOntos}}{% endif %}</textarea>
+            <small id="relatedHelp" class="form-text text-muted">What other ontologies are you aware of
+              that intersect with your domain, and what are your plans for collaborating with them?
+              The OBO Foundry policy on collaboration is described at
+              <a href="http://obofoundry.org/principles/fp-010-collaboration.html">
+              http://obofoundry.org/principles/fp-010-collaboration.html</a>.</small>
+          </div>
+          <div class="form-group">
+            <label for="intendedUse">Intended use/ related projects</label>
+            <textarea class="form-control" name="intendedUse" id="intendedUse"
+                      aria-describedby="useHelp" rows="2"
+                      required>{% if intendedUse %}{{intendedUse}}{% endif %}</textarea>
+            <small id="useHelp" class="form-text text-muted">Is your ontology serving the need of one
+              or more specific projects? If so, please describe them. The OBO Foundry policy on
+              documented users is described at
+              <a href="http://obofoundry.org/principles/fp-009-users.html">
+              http://obofoundry.org/principles/fp-009-users.html</a>.</small>
+          </div>
+          <div class="form-group">
+            <label for="dataSource">Data source</label>
+            <textarea class="form-control" name="dataSource" id="dataSource"
+                      aria-describedby="dataSourceHelp" rows="2"
+                      required>{% if dataSource %}{{dataSource}}{% endif %}</textarea>
+            <small id="dataSourceHelp" class="form-text text-muted">Which resource, if any, was used to
+              generate the ontology (e.g., NCBITaxon was created from the NCBI taxonomy resource; the
+              Protein Ontology uses, in part, UniProtKB).</small>
+          </div>
+          <div class="form-group">
+            <label for="remarks">Additional remarks</label>
+            <textarea class="form-control" name="remarks" id="remarks"
+                      rows="2" >{% if remarks %}{{remarks}}{% endif %}</textarea>
+          </div>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary mb-2">Submit</button>
+    </form>
+  </div>
+
+  <div class="col-sm-12">
+    <div class="row p-2"> </div>
+  </div>
+
+  {% endif %}
+
+{% endblock %}

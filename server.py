@@ -193,7 +193,6 @@ def authorized(access_token):
     # Get some other useful information about the user:
     github_user = github.get("/user")
     g.user.github_id = github_user["id"]
-    g.user.github_login = github_user["login"]
 
     db_session.commit()
 
@@ -402,6 +401,210 @@ def prepare_new():
     user. Once the form is submitted a request is sent to begin editing the new config.
     """
     return render_template("prepare_new_config.jinja2", login=g.user.github_login)
+
+
+@app.route("/foundry_reg", methods=["GET"])
+@verify_logged_in
+def prepare_foundry():
+    """
+    Handles a request to create a new OBO Foundry ontology registration.
+    """
+    github_user = github.get("/user")
+
+    github_name = github_user["name"]
+    github_email = github_user["email"] if "email" in github_user else None
+
+    return render_template(
+        "new_foundry_reg.jinja2",
+        login=g.user.github_login,
+        contactPerson=github_name,
+        contactGitHub=g.user.github_login,
+        contactEmail=github_email,
+    )
+
+
+@app.route("/foundry_reg", methods=["POST"])
+@verify_logged_in
+def new_foundry():
+    """
+    Handles a POST request to request a new Foundry ontology registration. The parameters
+    expected in the POST body are:
+    ontologyTitle
+    idSpace
+    ontoLoc
+    issueTracker
+    contactPerson
+    contactEmail
+    contactGitHub
+    ontoLicense
+    domain
+    relatedOntos
+    intendedUse
+    dataSource
+    remarks
+    """
+    ontologyTitle = request.form.get("ontologyTitle")
+    idSpace = request.form.get("idSpace")
+    ontoLoc = request.form.get("ontoLoc")
+    contactPerson = request.form.get("contactPerson")
+    contactEmail = request.form.get("contactEmail")
+    contactGitHub = request.form.get("contactGitHub")
+    issueTracker = request.form.get("issueTracker")
+    ontoLicense = request.form.get("ontoLicense")
+    domain = request.form.get("domain")
+    relatedOntos = request.form.get("relatedOntos")
+    intendedUse = request.form.get("intendedUse")
+    dataSource = request.form.get("dataSource")
+    remarks = request.form.get("remarks")
+
+    if any(
+        [
+            item is None
+            for item in [
+                ontologyTitle,
+                idSpace,
+                ontoLoc,
+                contactPerson,
+                contactEmail,
+                contactGitHub,
+                issueTracker,
+                ontoLicense,
+                domain,
+                relatedOntos,
+                intendedUse,
+                dataSource,
+            ]
+        ]
+    ):
+        return Response("Malformed POST request", status=400)
+
+    # Validate the requested ID space is unique across the existing registry
+    registry_configs = github.get(
+        f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/'
+        f'contents/{editor_types["registry"]["dir"]}'
+    )
+    if not registry_configs:
+        raise Exception("Could not get contents of the registry config directory")
+    registry_config_ids = [
+        rc["name"].casefold().replace(app.config["MARKDOWN_EXT"], "")
+        for rc in registry_configs
+    ]
+    if idSpace.casefold() in registry_config_ids:
+        resultType = "failure"
+        print(f"Non-unique ID requested: {idSpace}")
+        return render_template(
+            "new_foundry_reg.jinja2",
+            login=g.user.github_login,
+            resultType=resultType,
+            errorMessage=f"The ID space {idSpace} is already in use. Please try "
+            f"a different option. ",
+            ontologyTitle=ontologyTitle,
+            idSpace=idSpace,
+            ontoLoc=ontoLoc,
+            issueTracker=issueTracker,
+            contactPerson=contactPerson,
+            contactEmail=contactEmail,
+            contactGitHub=contactGitHub,
+            ontoLicense=ontoLicense,
+            domain=domain,
+            relatedOntos=relatedOntos,
+            intendedUse=intendedUse,
+            dataSource=dataSource,
+            remarks=remarks,
+        )
+
+    issueBody = app.config["NEW_ONTOLOGY_REQUEST_TEMPLATE"].format(
+        ontologyTitle=ontologyTitle,
+        idSpace=idSpace,
+        ontoLoc=ontoLoc,
+        issueTracker=issueTracker,
+        contactPerson=contactPerson,
+        contactEmail=contactEmail,
+        contactGitHub=contactGitHub,
+        ontoLicense=ontoLicense,
+        domain=domain,
+        relatedOntos=relatedOntos,
+        intendedUse=intendedUse,
+        dataSource=dataSource,
+        remarks=remarks,
+    )
+
+    issueTitle = f"New Ontology Request: {ontologyTitle}"
+
+    url = app.config["REGISTRY_REQUEST"]
+    logger.debug(f"About to try to create GitHub new ontology request issue at {url}")
+
+    # Create our issue
+    issue = {"title": issueTitle, "body": issueBody, "labels": ["new ontology"]}
+    # Add the issue to our repository
+    try:
+        response = github.post(url, issue)
+        if response:
+            print(f"Successfully created issue {issueTitle}, response: {response}")
+            resultType = "success"
+        else:
+            resultType = "failure"
+            print(f"Could not create issue {issueTitle}")
+            return render_template(
+                "new_foundry_reg.jinja2",
+                login=g.user.github_login,
+                resultType=resultType,
+                errorMessage="An unknown error occurred, there was no response.",
+                ontologyTitle=ontologyTitle,
+                idSpace=idSpace,
+                ontoLoc=ontoLoc,
+                issueTracker=issueTracker,
+                contactPerson=contactPerson,
+                contactEmail=contactEmail,
+                contactGitHub=contactGitHub,
+                ontoLicense=ontoLicense,
+                domain=domain,
+                relatedOntos=relatedOntos,
+                intendedUse=intendedUse,
+                dataSource=dataSource,
+                remarks=remarks,
+            )
+    except GitHubError as err:
+        resultType = "failure"
+        print(f"An unexpected error occurred: {err},{err.response.json()['message']}")
+        return render_template(
+            "new_foundry_reg.jinja2",
+            login=g.user.github_login,
+            resultType=resultType,
+            errorMessage=err.response.json()["message"],
+            ontologyTitle=ontologyTitle,
+            idSpace=idSpace,
+            ontoLoc=ontoLoc,
+            issueTracker=issueTracker,
+            contactPerson=contactPerson,
+            contactEmail=contactEmail,
+            contactGitHub=contactGitHub,
+            ontoLicense=ontoLicense,
+            domain=domain,
+            relatedOntos=relatedOntos,
+            intendedUse=intendedUse,
+            dataSource=dataSource,
+            remarks=remarks,
+        )
+
+    emailDraft = app.config["NEW_ONTOLOGY_EMAIL_TEMPLATE"].format(
+        idSpace=idSpace,
+        ontologyTitle=ontologyTitle,
+        ontoLoc=ontoLoc,
+        domain=domain,
+        issueLink=response["html_url"],
+        contactPerson=contactPerson,
+    )
+
+    return render_template(
+        "new_foundry_reg.jinja2",
+        login=g.user.github_login,
+        resultType=resultType,
+        ontologyTitle=ontologyTitle,
+        idSpace=idSpace,
+        emailDraft=emailDraft,
+        issueURL=response["html_url"],
+    )
 
 
 @app.route("/edit/<editor_type>/<filename>")
