@@ -189,6 +189,15 @@
               http://www.obofoundry.org/principles/fp-001-open.html</a>.</small>
           </div>
           <div class="form-group">
+            <label for="description">Ontology description</label>
+            <input type="text" class="form-control" name="description" id="description"
+                   aria-describedby="descriptionHelp"
+                   {% if description %} value="{{ description }}" {% endif %}
+                   required>
+            <small id="descriptionHelp" class="form-text text-muted">Briefly describe your ontology.
+            </small>
+          </div>
+          <div class="form-group">
             <label for="domain">What domain is the ontology intended to cover?</label>
             <input type="text" class="form-control" name="domain" id="domain"
                    aria-describedby="domainHelp"
@@ -247,5 +256,8 @@
   </div>
 
   {% endif %}
+
+
+<script type="text/javascript" src="new_foundry_reg.js"></script>
 
 {% endblock %}

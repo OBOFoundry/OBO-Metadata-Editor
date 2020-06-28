@@ -163,6 +163,7 @@ if (document.getElementById("code")) {
     hasChanged = true;
     editor.scrollIntoView(what={line: editor.getCursor().line, ch: 0}, margin=12);
   });
+
 }
 
 
@@ -414,201 +415,226 @@ var validate = function(filename, editor_type) {
 /**
  * Submit a pull request to github to add a new configuration to the repository.
  */
-var add_config = function(filename, editor_type) {
+var add_config = function(filename, editor_type, issueNumber, addIssueLink) {
+  var projectName = filename.toUpperCase().substring(0, filename.lastIndexOf('.'));
+  $("#commit-msg").attr('value','Adding ' + filename);
+  if (editor_type == 'registry') {
+    $("#descr").attr('value','Adding registry configuration for '+projectName +
+                     '. Closes #' + issueNumber);
+  }
+  else if (addIssueLink) {
+    $("#descr").attr('value','Adding PURL configuration for '+ projectName +
+                     '. See also '+addIssueLink);
+  }
   // Get a confirmation from the user:
-  bootbox.prompt({
-    title: "Please describe the new configuration you would like to add: " +
-      filename.toUpperCase().substring(0, filename.lastIndexOf('.')),
-    inputType: 'textarea',
-    value: 'Adding ' + filename,
-    buttons: {
-      confirm: {
-        label: 'Submit',
-        className: 'btn-danger'
-      },
-      cancel: {
-        label: 'Cancel',
-        className: 'btn-primary'
-      }
-    },
-    callback: function(commit_msg) {
-      if (commit_msg !== null && commit_msg !== undefined) {
-        if (!commit_msg || commit_msg.trim() === "") {
-          bootbox.alert({
-            closeButton: false,
-            message: "Commit message cannot be empty. New configuration was not submitted."});
-          return;
-        }
+  var modal = bootbox.dialog({
+      message: $(".form-content").html(),
+      title: "Please describe the new configuration you would like to add: " +
+      projectName,
+        buttons: {
+          confirm: {
+            label: 'Submit',
+            className: 'btn-danger',
+            callback: function() {
+                var aForm = modal.find(".form");
+                var formData = aForm.serializeArray(),
+                    dataObj = {};
+                $(formData).each(function(i, field){
+                  dataObj[field.name] = field.value;
+                });
+                var msgTitle = dataObj["commit-msg"];
+                var msgBody = dataObj["descr"];
+              if (msgTitle !== null && msgTitle !== undefined) {
+                if (!msgTitle || msgTitle.trim() === "") {
+                  bootbox.alert({
+                    closeButton: false,
+                    message: "Commit message cannot be empty. New configuration was not submitted."});
+                  return;
+                }
 
-        // Disable the add button:
-        get_commit_btn().disabled = true;
+                // Disable the add button:
+                get_commit_btn().disabled = true;
 
-        // Extract the code from the text area:
-        var code = document.getElementById("code").value;
+                // Extract the code from the text area:
+                var code = document.getElementById("code").value;
 
-        showAlertFor("Submitting new configuration ...","alert-info");
+                showAlertFor("Submitting new configuration ...","alert-info");
 
-        // Embed the code into a request.
-        var request = new XMLHttpRequest();
-        // Define a function to handle a state change of the request:
-        request.onreadystatechange = function() {
-          $("*").css("cursor", "default");
-          if (request.readyState === 4) {
-            if (!request.status) {
-              showAlertFor("Problem communicating with server","alert-danger");
+                // Embed the code into a request.
+                var request = new XMLHttpRequest();
+                // Define a function to handle a state change of the request:
+                request.onreadystatechange = function() {
+                  $("*").css("cursor", "default");
+                  if (request.readyState === 4) {
+                    if (!request.status) {
+                      showAlertFor("Problem communicating with server","alert-danger");
+                    }
+                    else if (request.status === 200) {
+                      var response = JSON.parse(request.responseText);
+                      var prInfo = response['pr_info'];
+                      var createPurlTxt = (editor_type == 'registry' && issueNumber) ?
+                      'The next step is to ' +
+                      '<a href="javascript:loadEditorFor(\'' + issueNumber + '\',\'' +
+                        prInfo['html_url'] +'\');">Create a PURL config</a>.' :'' ;
+                      showAlertFor('New configuration submitted successfully. It will be ' +
+                        'reviewed by a moderator before being added to the repository. Click ' +
+                        '<a href="' + prInfo['html_url'] + '" target="__blank">here</a> to view your ' +
+                        'pull request on GitHub. ' + createPurlTxt,"alert-success");
+                      hasChanged = false;
+                    }
+                    else {
+                      // Display the error message in the status area. Note that we must replace any angle
+                      // angle brackets with HTML escape codes.
+                      alertText = "Submission of new configuration failed.\n\n" +
+                        request.responseText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                      showAlertFor(alertText,"alert-danger");
+                    }
+                  }
+                }
+                // Post the request to the server.
+                request.open('POST', '/add_config', true);
+                request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+                request.send('filename=' + filename +
+                             '&commit_msg=' + msgTitle +
+                             '&code=' + encodeURIComponent(code) +
+                             '&editor_type=' + editor_type +
+                             '&long_msg='+ msgBody )
+                $("*").css("cursor", "progress");
+              }
             }
-            else if (request.status === 200) {
-              var response = JSON.parse(request.responseText);
-              var prInfo = response['pr_info'];
-              showAlertFor('New configuration submitted successfully. It will be ' +
-                'reviewed by a moderator before being added to the repository. Click ' +
-                '<a href="' + prInfo['html_url'] + '" target="__blank">here</a> to view your ' +
-                'pull request on GitHub.',"alert-success");
-              hasChanged = false;
-            }
-            else {
-              // Display the error message in the status area. Note that we must replace any angle
-              // angle brackets with HTML escape codes.
-              alertText = "Submission of new configuration failed.\n\n" +
-                request.responseText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-              showAlertFor(alertText,"alert-danger");
+          },
+          cancel: {
+            label: 'Cancel',
+            className: 'btn-primary',
+            callback: function() {
             }
           }
         }
-        // Post the request to the server.
-        request.open('POST', '/add_config', true);
-        request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
-        request.send('filename=' + filename +
-                     '&commit_msg=' + commit_msg +
-                     '&code=' + encodeURIComponent(code) +
-                     '&editor_type=' + editor_type)
-        $("*").css("cursor", "progress");
-      }
-    }
   });
 }
-
 
 /**
  * Submit a pull request to github to update the given configuration file in the repository.
  */
 var update_config = function(filename,editor_type) {
+  var projectName = filename.toUpperCase().substring(0, filename.lastIndexOf('.'));
+  $("#commit-msg").attr('value','Updating ' + filename);
+  if (editor_type == 'registry') {
+    $("#descr").attr('value','Updating registry configuration for '+projectName);
+  }
+  else if (addIssueLink) {
+    $("#descr").attr('value','Updating PURL configuration for '+ projectName);
+  }
   // Get a confirmation from the user:
-  bootbox.prompt({
+  var modal = bootbox.dialog({
     title: "You are about to submit changes. Please describe the changes you have made to " +
       filename.toUpperCase().substring(0, filename.lastIndexOf('.')),
-    inputType: 'textarea',
-    value: 'Updating ' + filename,
+    message: $(".form-content").html(),
     buttons: {
       confirm: {
         label: 'Submit',
-        className: 'btn-danger'
+        className: 'btn-danger',
+        callback: function() {
+            var aForm = modal.find(".form");
+            var formData = aForm.serializeArray(),
+                dataObj = {};
+            $(formData).each(function(i, field){
+              dataObj[field.name] = field.value;
+            });
+            var commit_msg = dataObj["commit-msg"];
+            var msgBody = dataObj["descr"];
+            if (commit_msg !== null && commit_msg !== undefined) {
+                if (!commit_msg || commit_msg.trim() === "") {
+                  bootbox.alert({
+                    closeButton: false,
+                    message: "Commit message cannot be empty. Your change has not been submitted."});
+                  return;
+                }
+
+                // Disable the update button:
+                get_commit_btn().disabled = true;
+
+                // Extract the code from the text area:
+                var code = document.getElementById("code").value;
+
+                showAlertFor("Submitting update ...","alert-info");
+
+                // Embed the code into a request.
+                var request = new XMLHttpRequest();
+                // Define a function to handle a state change of the request:
+                request.onreadystatechange = function() {
+                  $("*").css("cursor", "default");
+                  if (request.readyState === 4) {
+                    if (!request.status) {
+                      showAlertFor("Problem communicating with server","alert-danger");
+                    }
+                    else if (request.status === 200) {
+                      var response = JSON.parse(request.responseText);
+                      var prInfo = response['pr_info'];
+                      showAlertFor('Update submitted successfully. The changes will be ' +
+                        'reviewed by a moderator before being added to the repository. Click ' +
+                        '<a href="' + prInfo['html_url'] + '" target="__blank">here</a> to view your ' +
+                        'pull request on GitHub.',"alert-success");
+                      hasChanged = false;
+                    }
+                    else {
+                      // Display the error message in the status area. Note that we must replace any angle
+                      // angle brackets with HTML escape codes.
+                      alertText = "Submission of update failed.\n\n" +
+                        request.responseText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                      showAlertFor(alertText,"alert-danger");
+                    }
+                  }
+                }
+                // Post the request to the server.
+                request.open('POST', '/update_config', true);
+                request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
+                request.send('filename=' + filename +
+                             '&commit_msg=' + commit_msg +
+                             '&code=' + encodeURIComponent(code) +
+                             '&editor_type='+editor_type) +
+                             '&long_msg=' + msgBody
+                $("*").css("cursor", "progress");
+          }
+        }
       },
       cancel: {
         label: 'Cancel',
         className: 'btn-primary'
-      }
-    },
-    callback: function(commit_msg) {
-      if (commit_msg !== null && commit_msg !== undefined) {
-        if (!commit_msg || commit_msg.trim() === "") {
-          bootbox.alert({
-            closeButton: false,
-            message: "Commit message cannot be empty. Your change has not been submitted."});
-          return;
-        }
-
-        // Disable the update button:
-        get_commit_btn().disabled = true;
-
-        // Extract the code from the text area:
-        var code = document.getElementById("code").value;
-
-        showAlertFor("Submitting update ...","alert-info");
-
-        // Embed the code into a request.
-        var request = new XMLHttpRequest();
-        // Define a function to handle a state change of the request:
-        request.onreadystatechange = function() {
-          $("*").css("cursor", "default");
-          if (request.readyState === 4) {
-            if (!request.status) {
-              showAlertFor("Problem communicating with server","alert-danger");
-            }
-            else if (request.status === 200) {
-              var response = JSON.parse(request.responseText);
-              var prInfo = response['pr_info'];
-              showAlertFor('Update submitted successfully. The changes will be ' +
-                'reviewed by a moderator before being added to the repository. Click ' +
-                '<a href="' + prInfo['html_url'] + '" target="__blank">here</a> to view your ' +
-                'pull request on GitHub.',"alert-success");
-              hasChanged = false;
-            }
-            else {
-              // Display the error message in the status area. Note that we must replace any angle
-              // angle brackets with HTML escape codes.
-              alertText = "Submission of update failed.\n\n" +
-                request.responseText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-              showAlertFor(alertText,"alert-danger");
-            }
-          }
-        }
-        // Post the request to the server.
-        request.open('POST', '/update_config', true);
-        request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
-        request.send('filename=' + filename +
-                     '&commit_msg=' + commit_msg +
-                     '&code=' + encodeURIComponent(code) +
-                     '&editor_type='+editor_type)
-        $("*").css("cursor", "progress");
       }
     }
   });
 };
 
 /**
- * Handle the behaviour of the license checkbox on the "New Ontology Registration" form
+ * Send a non-AJAX POST request to redirect to a new editor corresponding to the PURL editor.
  */
-if ($("ontoLicenseTxt")) {
-    let toggleInputRequired = ( checkbox, input ) => {
-        checkbox.addEventListener( 'change', e => {
-            if ( document.getElementById("ontoLicense3").checked ) {
-                input.setAttribute( 'required', 'required' );
-            } else {
-                input.removeAttribute( 'required' );
-                input.required=false;
-            }
-        } );
+var loadEditorFor = function(issueNo, addL) {
+    var form = document.createElement('form');
+    document.body.appendChild(form);
+    form.method = 'post';
+    form.action = '/edit_new';
 
-        var event = new Event('change');
-        checkbox.dispatchEvent(event);
-    }
+    var issueNumberI = document.createElement('input');
+    issueNumberI.type = 'hidden';
+    issueNumberI.name = 'issueNumber';
+    issueNumberI.value = issueNo;
+    form.appendChild(issueNumberI);
 
-    // Need to listen for changes on all the checkboxes, not just the 'other' checkbox,
-    // as only one change event is fired when the selection is toggled between them.
-    toggleInputRequired( document.getElementById("ontoLicense3"), document.getElementById("ontoLicenseTxt") );
-    toggleInputRequired( document.getElementById("ontoLicense1"), document.getElementById("ontoLicenseTxt") );
-    toggleInputRequired( document.getElementById("ontoLicense2"), document.getElementById("ontoLicenseTxt") );
+    var editorTypeI = document.createElement('input');
+    editorTypeI.type = 'hidden';
+    editorTypeI.name = 'editor_type';
+    editorTypeI.value = 'purl';
+    form.appendChild(editorTypeI);
 
-    document.getElementById("ontoLicenseTxt").addEventListener( 'change' , e => {
-        const value = e.currentTarget.value.trim()
-        if (value) {
-            document.getElementById("ontoLicense3").checked = true;
-            document.getElementById("ontoLicense3").value = value;
-        }
-    })
+    var addLI = document.createElement('input');
+    addLI.type = 'hidden';
+    addLI.name = 'addIssueLink'
+    addLI.value = addL;
+    form.appendChild(addLI);
 
-    document.getElementById("ontoLoc").addEventListener( 'change' , e => {
-        const value = e.currentTarget.value.trim()
-        if (value) {
-            if (document.getElementById("issueTracker").value.length == 0) { //if not filled
-               var url_pattern = /^https?:\/\/(w{3}\.)?github.com\/?/ ;
-               if( value.match(url_pattern)) {
-                   document.getElementById("issueTracker").value = value+'/issues/';
-               }
-            }
-        }
-    });
+    form.submit();
 }
+
 
 

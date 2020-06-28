@@ -92,21 +92,10 @@ NEW_PROJECT_PURL_TEMPLATE = textwrap.dedent(
   """
 )
 
-NEW_ONTOLOGY_REQUEST_TEMPLATE = """---
-ontology_title:  {ontologyTitle}
-idspace: {idSpace}
-ontology_location: {ontoLoc}
-issue_tracker: {issueTracker}
-contact_person:
-    - name: {contactPerson}
-    - email_address: {contactEmail}
-    - github_username: {contactGitHub}
-ontology_license: {ontoLicense}
-intended_domain: {domain}
-related_ontologies: {relatedOntos}
-intended_use:  {intendedUse}
-data_source: {dataSource}
-remarks:  {remarks}
+NEW_PROJECT_REGISTRY_TEMPLATE = """---
+{yaml_registry_details}
+---
+{description}
 """
 
 NEW_ONTOLOGY_EMAIL_TEMPLATE = """Dear OBO Foundry,

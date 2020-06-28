@@ -6,41 +6,60 @@
 
   <div class="row">&nbsp;</div>
 
-  {% if notfound is defined %}
-    <div class="col-sm-4 alert alert-warning" role="alert">
-      {{ notfound }}
+  {% if error_message is defined %}
+    <div class="col-sm-12 alert alert-error" role="alert">
+      {{ error_message }}
     </div>
   {% endif %}
 
-  <div class="col-sm-4 bg-light border">
-    <div class="row">&nbsp;</div>
-    <form action="/edit_new" method="POST">
-      <div class="form-group">
-        <label for="projectId">ID</label>
-        <input type="text" class="form-control" name="projectId" id="projectId"
-               {% if project_id is defined %}
-                 value="{{ project_id }}"
-               {% endif %}
-               required>
-      </div>
-      <div class="form-group">
-        <label for="githubOrg">GitHub organization/username</label>
-        <input type="text" class="form-control" name="githubOrg" id="githubOrg"
-               {% if github_org is defined %}
-                 value="{{ github_org }}"
-               {% endif %}
-               required>
-      </div>
-      <div class="form-group">
-        <label for="githubOrg">GitHub project</label>
-        <input type="text" class="form-control" name="githubRepo" id="githubRepo"
-               {% if github_repo is defined %}
-                 value="{{ github_repo }}"
-               {% endif %}
-               required>
-      </div>
-      <button type="submit" class="btn btn-primary mb-2">Submit</button>
-    </form>
+  {% if dev %}
+  <div class="col-sm-12 bg-light border">
+    <div class="row mb-2">&nbsp;Do you already have an issue number
+      for a Foundry ontology registration request?</div>
+      <form action="/edit_new" method="POST">
+        <div class="form-group">
+          <label for="issueNumber">Issue Number</label>
+          <input type="text" class="form-control" name="issueNumber" id="issueNumber"
+                 required>
+        </div>
+        <button type="submit" class="btn btn-primary mb-2">Submit</button>
+      </form>
+  </div>
+
+  {% endif %}
+
+  <div class="row">&nbsp;</div>
+
+  <div class="col-sm-12 bg-light border">
+    <div class="row mb-2">&nbsp;Alternatively, please provide the following information
+      for the new configuration.</div>
+      <form action="/edit_new" method="POST">
+        <div class="form-group">
+          <label for="projectId">ID</label>
+          <input type="text" class="form-control" name="projectId" id="projectId"
+                 {% if project_id is defined %}
+                   value="{{ project_id }}"
+                 {% endif %}
+                 required>
+        </div>
+        <div class="form-group">
+          <label for="githubOrg">GitHub organization/username</label>
+          <input type="text" class="form-control" name="githubOrg" id="githubOrg"
+                 {% if github_org is defined %}
+                   value="{{ github_org }}"
+                 {% endif %}
+                 required>
+        </div>
+        <div class="form-group">
+          <label for="githubOrg">GitHub project</label>
+          <input type="text" class="form-control" name="githubRepo" id="githubRepo"
+                 {% if github_repo is defined %}
+                   value="{{ github_repo }}"
+                 {% endif %}
+                 required>
+        </div>
+        <button type="submit" class="btn btn-primary mb-2">Submit</button>
+      </form>
   </div>
 
 
