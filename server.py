@@ -400,7 +400,7 @@ def edit_new():
             github_repo = githuburl.group(2)
             logger.debug(f"Got github details: {github_org}, {github_repo}")
 
-    if editor_type is None:  # First step
+    if dev and editor_type is None:  # First step
         try:
             github.get(f"repos/{github_org}/{github_repo}")
         except GitHubError:
@@ -457,7 +457,7 @@ def edit_new():
             issueNumber=issueNumber,
             login=g.user.github_login,
         )
-    elif editor_type == "purl":
+    elif not dev or editor_type == "purl":
         # Generate some text to populate the editor initially with,
         # based on the new project template,
         # and then inject it into the jinja2 template for the metadata editor:

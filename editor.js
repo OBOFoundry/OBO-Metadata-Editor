@@ -422,9 +422,9 @@ var add_config = function(filename, editor_type, issueNumber, addIssueLink) {
     $("#descr").attr('value','Adding registry configuration for '+projectName +
                      '. Closes #' + issueNumber);
   }
-  else if (addIssueLink) {
+  else if (editor_type == 'purl') {
     $("#descr").attr('value','Adding PURL configuration for '+ projectName +
-                     '. See also '+addIssueLink);
+             (addIssueLink !== 'None'?'. See also '+addIssueLink : '') );
   }
   // Get a confirmation from the user:
   var modal = bootbox.dialog({
@@ -473,22 +473,28 @@ var add_config = function(filename, editor_type, issueNumber, addIssueLink) {
                       var response = JSON.parse(request.responseText);
                       var prInfo = response['pr_info'];
                       var nextBtn = document.getElementById('next-step-btn');
-                      nextBtn.disabled = false;
-                      if (editor_type == 'registry') {
-                        nextBtn.addEventListener("click", function() {
-                           loadEditorFor(issueNumber,prInfo['html_url']);
-                        });
-                      } else {
-                        nextBtn.addEventListener("click", function() {
-                           window.location.href = "/";
-                         });
+                      if (nextBtn) {
+                          nextBtn.disabled = false;
+                          if (editor_type == 'registry') {
+                            nextBtn.addEventListener("click", function() {
+                               loadEditorFor(issueNumber,prInfo['html_url']);
+                            });
+                          } else {
+                            nextBtn.addEventListener("click", function() {
+                               window.location.href = "/";
+                             });
+                          }
                       }
-                      var nextStepTxt = (editor_type == 'registry' && issueNumber) ?
-                      'The next step is to ' +
+                      var nextStepTxt = '' ;
+                      if (editor_type == 'registry' && issueNumber) {
+                        nextStepText = 'The next step is to ' +
                       '<a href="javascript:loadEditorFor(\'' + issueNumber + '\',\'' +
-                        prInfo['html_url'] +'\');">Create a PURL config</a>.' :
-                        'You\'re all done! The PR for the registry config was <a href="'+
-                        addIssueLink+'" target="__blank">also</a> successfully submitted.' ;
+                        prInfo['html_url'] +'\');">Create a PURL config</a>.';
+                      }
+                      if (editor_type == 'purl' && addIssueLink) {
+                        nextStepText = 'You\'re all done! The PR for the registry config was <a href="'+
+                         addIssueLink+'" target="__blank">also</a> successfully submitted.';
+                      }
                       showAlertFor('New configuration submitted successfully. It will be ' +
                         'reviewed by a moderator before being added to the repository. Click ' +
                         '<a href="' + prInfo['html_url'] + '" target="__blank">here</a> to view your ' +
@@ -535,7 +541,7 @@ var update_config = function(filename,editor_type) {
   if (editor_type == 'registry') {
     $("#descr").attr('value','Updating registry configuration for '+projectName);
   }
-  else if (addIssueLink) {
+  else if (editor_type == 'purl') {
     $("#descr").attr('value','Updating PURL configuration for '+ projectName);
   }
   // Get a confirmation from the user:
