@@ -375,6 +375,7 @@ def edit_new():
 
     logger.debug(f"Got editor type: {editor_type}")
 
+    issueDetails = None
     if issueNumber:
         # Retrieve all the information from the issue
         # GET /repos/:owner/:repo/issues/:issue_number
@@ -385,11 +386,16 @@ def edit_new():
         )["body"]
         logger.debug(f"Got issue body {issueData}")
         issueDetails = yaml.load(issueData, Loader=yaml.SafeLoader)
+        # Remove keys not needed for the registry metadata
+        del issueDetails["related_ontologies"]
+        del issueDetails["intended_use"]
+        del issueDetails["data_source"]
+        del issueDetails["remarks"]
 
         ontologyLocation = issueDetails["homepage"]
         project_id = issueDetails["id"]
         githuburl = re.match(r"https?://github\.com/(.*)/(.*)", ontologyLocation)
-        if githuburl:
+        if githuburl and github_org is None and github_repo is None:
             github_org = githuburl.group(1)
             github_repo = githuburl.group(2)
             logger.debug(f"Got github details: {github_org}, {github_repo}")
@@ -406,11 +412,25 @@ def edit_new():
                 github_repo=github_repo,
                 error_message=f"The GitHub repository at {github_org}/{github_repo} does not exist",
             )
-        # Remove keys not needed for the registry metadata
-        del issueDetails["related_ontologies"]
-        del issueDetails["intended_use"]
-        del issueDetails["data_source"]
-        del issueDetails["remarks"]
+        # If issueDetails have not been loaded, populate an empty template
+        if issueDetails is None:
+            # Generate an empty template
+            issueDetails = {}
+            issueDetails["title"] = ""
+            issueDetails["id"] = project_id
+            issueDetails["homepage"] = f"https://github.org/{github_org}/{github_repo}/"
+            issueDetails[
+                "tracker"
+            ] = f"https://github.org/{github_org}/{github_repo}/issues"
+            issueDetails["contact"] = {
+                "label": "",
+                "email": "",
+                "github_username": g.user.github_login,
+            }
+            issueDetails["license"] = {"url": "", "label": ""}
+            issueDetails["description"] = ""
+            issueDetails["domain"] = ""
+
         # Generate text for initial registry config
         registryYamlText = yaml.dump(
             {

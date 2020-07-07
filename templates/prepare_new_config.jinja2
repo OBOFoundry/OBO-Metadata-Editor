@@ -2,7 +2,7 @@
 
 {% block content %}
 
-  <h4>Add a new project configuration</h4>
+  <h4>{%if dev%} Step 1 of 3: {% endif %} Add a new project configuration</h4>
 
   <div class="row">&nbsp;</div>
 
@@ -31,8 +31,8 @@
   <div class="row">&nbsp;</div>
 
   <div class="col-sm-12 bg-light border">
-    <div class="row mb-2">&nbsp;Alternatively, please provide the following information
-      for the new configuration.</div>
+    <div class="row mb-2"> {% if dev %} Alternatively, please {% else %} Please {% endif %}
+      provide the following information for the new configuration.</div>
       <form action="/edit_new" method="POST">
         <div class="form-group">
           <label for="projectId">ID</label>

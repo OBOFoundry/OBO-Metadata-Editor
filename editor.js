@@ -472,14 +472,27 @@ var add_config = function(filename, editor_type, issueNumber, addIssueLink) {
                     else if (request.status === 200) {
                       var response = JSON.parse(request.responseText);
                       var prInfo = response['pr_info'];
-                      var createPurlTxt = (editor_type == 'registry' && issueNumber) ?
+                      var nextBtn = document.getElementById('next-step-btn');
+                      nextBtn.disabled = false;
+                      if (editor_type == 'registry') {
+                        nextBtn.addEventListener("click", function() {
+                           loadEditorFor(issueNumber,prInfo['html_url']);
+                        });
+                      } else {
+                        nextBtn.addEventListener("click", function() {
+                           window.location.href = "/";
+                         });
+                      }
+                      var nextStepTxt = (editor_type == 'registry' && issueNumber) ?
                       'The next step is to ' +
                       '<a href="javascript:loadEditorFor(\'' + issueNumber + '\',\'' +
-                        prInfo['html_url'] +'\');">Create a PURL config</a>.' :'' ;
+                        prInfo['html_url'] +'\');">Create a PURL config</a>.' :
+                        'You\'re all done! The PR for the registry config was <a href="'+
+                        addIssueLink+'" target="__blank">also</a> successfully submitted.' ;
                       showAlertFor('New configuration submitted successfully. It will be ' +
                         'reviewed by a moderator before being added to the repository. Click ' +
                         '<a href="' + prInfo['html_url'] + '" target="__blank">here</a> to view your ' +
-                        'pull request on GitHub. ' + createPurlTxt,"alert-success");
+                        'pull request on GitHub. ' + nextStepTxt,"alert-success");
                       hasChanged = false;
                     }
                     else {
