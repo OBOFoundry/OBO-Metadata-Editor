@@ -487,12 +487,12 @@ var add_config = function(filename, editor_type, issueNumber, addIssueLink) {
                       }
                       var nextStepTxt = '' ;
                       if (editor_type == 'registry' && issueNumber) {
-                        nextStepText = 'The next step is to ' +
+                        nextStepTxt = 'The next step is to ' +
                       '<a href="javascript:loadEditorFor(\'' + issueNumber + '\',\'' +
                         prInfo['html_url'] +'\');">Create a PURL config</a>.';
                       }
                       if (editor_type == 'purl' && addIssueLink) {
-                        nextStepText = 'You\'re all done! The PR for the registry config was <a href="'+
+                        nextStepTxt = 'You\'re all done! The PR for the registry config was <a href="'+
                          addIssueLink+'" target="__blank">also</a> successfully submitted.';
                       }
                       showAlertFor('New configuration submitted successfully. It will be ' +

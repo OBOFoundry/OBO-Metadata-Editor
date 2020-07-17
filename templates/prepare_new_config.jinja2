@@ -19,8 +19,15 @@
       <form action="/edit_new" method="POST">
         <div class="form-group">
           <label for="issueNumber">Issue Number</label>
-          <input type="text" class="form-control" name="issueNumber" id="issueNumber"
-                 required>
+          {% if issueList|length > 0 %}
+            <select class="form-control" id="issueNumber" name="issueNumber">
+              {% for x in issueList.keys() %}
+                <option value = '{{ x }}' > {{x}} : {{ issueList[x] }}</option>
+              {% endfor %}
+            </select>
+          {% else %}
+            <input type="text" class="form-control" id="issueNumber" name="issueNumber">
+          {% endif %}
         </div>
         <button type="submit" class="btn btn-primary mb-2">Submit</button>
       </form>

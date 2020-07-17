@@ -489,7 +489,21 @@ def prepare_new():
     process. This endpoint generates a form to request information about the new project from the
     user. Once the form is submitted a request is sent to begin editing the new config.
     """
-    return render_template("prepare_new_config.jinja2", login=g.user.github_login)
+
+    issues = {}
+    issue_list = github.get(
+        f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/' f"issues",
+        params={"state": "open", "labels": "new ontology"},
+    )
+    for issue in issue_list:
+        number = issue["number"]
+        title = issue["title"]
+        logger.debug(f"Got issue: {number}, {title}")
+        issues[number] = title
+
+    return render_template(
+        "prepare_new_config.jinja2", login=g.user.github_login, issueList=issues
+    )
 
 
 @app.route("/foundry_reg", methods=["GET"])
