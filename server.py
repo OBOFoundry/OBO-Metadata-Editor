@@ -385,20 +385,36 @@ def edit_new():
             f"issues/{issueNumber}"
         )["body"]
         logger.debug(f"Got issue body {issueData}")
-        issueDetails = yaml.load(issueData, Loader=yaml.SafeLoader)
-        # Remove keys not needed for the registry metadata
-        del issueDetails["related_ontologies"]
-        del issueDetails["intended_use"]
-        del issueDetails["data_source"]
-        del issueDetails["remarks"]
+        try:
+            issueDetails = yaml.load(issueData, Loader=yaml.SafeLoader)
+            # Remove keys not needed for the registry metadata
+            del issueDetails["related_ontologies"]
+            del issueDetails["intended_use"]
+            del issueDetails["data_source"]
+            del issueDetails["remarks"]
 
-        ontologyLocation = issueDetails["homepage"]
-        project_id = issueDetails["id"]
-        githuburl = re.match(r"https?://github\.com/(.*)/(.*)", ontologyLocation)
-        if githuburl and github_org is None and github_repo is None:
-            github_org = githuburl.group(1)
-            github_repo = githuburl.group(2)
-            logger.debug(f"Got github details: {github_org}, {github_repo}")
+            ontologyLocation = issueDetails["homepage"]
+            project_id = issueDetails["id"]
+            githuburl = re.match(r"https?://github\.com/(.*)/(.*)", ontologyLocation)
+            if githuburl and github_org is None and github_repo is None:
+                github_org = githuburl.group(1)
+                github_repo = githuburl.group(2)
+                logger.debug(f"Got github details: {github_org}, {github_repo}")
+        except (yaml.YAMLError, TypeError) as err:
+            error_message = format(err)
+            return render_template(
+                "prepare_new_config.jinja2",
+                login=g.user.github_login,
+                project_id=project_id,
+                github_org=github_org,
+                github_repo=github_repo,
+                error_message=f"Not able to parse YAML metadata in the issue {issueNumber}, "
+                              f"due to: <i>{error_message}</i>. Please "
+                              f"<a href='http://github.com/{app.config['GITHUB_ORG']}/"
+                              f"{editor_types['registry']['repo']}/issues/{issueNumber}' "
+                              f"target = '_new'>visit the issue</a> to correct the YAML metadata, "
+                              f"or alternatively enter the required GitHub information below."
+            )
 
     if dev and editor_type is None:  # First step
         try:
@@ -410,7 +426,7 @@ def edit_new():
                 project_id=project_id,
                 github_org=github_org,
                 github_repo=github_repo,
-                error_message=f"The GitHub repository at {github_org}/{github_repo} does not exist",
+                error_message=f"The GitHub repository at {github_org}/{github_repo} does not exist"
             )
         # If issueDetails have not been loaded, populate an empty template
         if issueDetails is None:
