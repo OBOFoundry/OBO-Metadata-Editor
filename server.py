@@ -793,7 +793,8 @@ def validate():
             status = 400
         else:
             status = 200
-        error_summary = err.schema.get("description") or err.message
+        err_field = list(err.absolute_path)[-1] # last entry
+        error_summary = f"'{err_field}' {(err.schema.get('description') or err.message)}"
         logger.debug(f"Determining line number for error: {list(err.absolute_path)}")
         start = 0
         if not err.absolute_path:
