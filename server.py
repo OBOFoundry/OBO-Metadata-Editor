@@ -563,11 +563,41 @@ def validate():
             yaml_code = code_sections[1]
             yaml_source = yaml.load(yaml_code, Loader=yaml.SafeLoader)
             for s in registry_schemas.values():
-                title = s["title"]
                 try:
                     jsonschema.validate(yaml_source, s)
                 except jsonschema.exceptions.ValidationError as err:
-                    result_type = s["level"]
+                    logger.debug(
+                        f"JSON validation error in {list(err.absolute_schema_path)} "
+                        f":: {list(err.relative_schema_path)} "
+                    )
+                    # What is the level and title for this error?
+                    if "level" in err.schema and "title" in err.schema:
+                        result_type = err.schema["level"]
+                        title = err.schema["title"]
+                        logger.debug(
+                            f"Normal approach: got level {result_type} and title {title}"
+                        )
+                    else:
+                        error_path = list(err.absolute_schema_path)
+                        parent_schema = s
+                        if "allOf" in error_path:
+                            parent = error_path[error_path.index("allOf") + 1]
+                            parentSubset = parent_schema["allOf"][parent]
+                            title = parentSubset["title"]
+                            result_type = parentSubset["level"]
+                            logger.debug(
+                                f"Parsing approach: Got level {result_type} and title {title}"
+                            )
+                    if "is_obsolete" in yaml_source and yaml_source["is_obsolete"]:
+                        logger.debug(
+                            "Demoting schema error level for obsolete registry entry"
+                        )
+                        if result_type == "error":
+                            result_type = "warning"
+                        elif result_type == "warning":
+                            result_type = "info"
+
+                    # result_type = s["level"]
                     if result_type not in results:
                         results[result_type] = {}
                     response = handle_schema_error(err, code, result_type)

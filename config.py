@@ -39,19 +39,8 @@ PURL_SCHEMA = (
 REGISTRY_SCHEMA_DIR = (
     f"https://github.com/{GITHUB_ORG}/{GITHUB_FOUNDRY_REPO}/raw/master/util/schema/"
 )
-# Individual REGISTRY validation schema files
-REGISTRY_SCHEMA_FILES = [
-    "aberowl_id.json",
-    "activity_status.json",
-    "contact.json",
-    "description.json",
-    "homepage.json",
-    "id.json",
-    "license-lite.json",
-    "license.json",
-    "products.json",
-    "title.json",
-]
+# REGISTRY validation schema file (now merged)
+REGISTRY_SCHEMA_FILES = ["registry_schema.json"]
 
 # The URL where information (e.g. long names) about ontologies can be retrieved.
 ONTOLOGY_METADATA_URL = (
