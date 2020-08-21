@@ -30,6 +30,11 @@ YAML_EXT = ".yml"
 # File extension for Markdown files
 MARKDOWN_EXT = ".md"
 
+# The location to post New Ontology Registration issues to:
+REGISTRY_REQUEST = (
+    f"https://api.github.com/repos/{GITHUB_ORG}/{GITHUB_FOUNDRY_REPO}/issues"
+)
+
 # The location of the PURL validation schema:
 PURL_SCHEMA = (
     f"https://github.com/{GITHUB_ORG}/{GITHUB_PURL_REPO}/raw/"
@@ -75,3 +80,23 @@ NEW_PROJECT_PURL_TEMPLATE = textwrap.dedent(
   term_browser: ontobee
   """
 )
+
+NEW_PROJECT_REGISTRY_TEMPLATE = """---
+{yaml_registry_details}
+---
+{description}
+"""
+
+NEW_ONTOLOGY_EMAIL_TEMPLATE = """Dear OBO Foundry,
+
+We would like to request the namespace '{idSpace}' in the OBO Library.
+
+Request prefix: {idSpace}
+Ontology title: {ontologyTitle}
+Ontology location: {ontoLoc}
+Domain: {domain}
+
+The link to the issue is: {issueLink}
+
+Kind regards,
+{contactPerson}"""
