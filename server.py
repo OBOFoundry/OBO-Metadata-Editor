@@ -352,45 +352,149 @@ def edit_new():
     """
     Handles a POST request to start an editing session for a new configuration file. The parameters
     expected in the POST body are:
+    issueNumber: the original GitHub issue associated with this new registration, if it exists
     projectId: the ID associated with the new project configuration (e.g. 'AGRO')
     githubOrg: the github organisation for the project
     githubRepo: the github repository within the github organisation.
+    editor_type: whether to create REGISTRY or PURL configuration
+    addIssueLink: the issue link associated with the registry registration request, for PURL request
     """
+    logger.debug(f"Got edit_new request {request.form}")
+
+    issueNumber = request.form.get("issueNumber")
     project_id = request.form.get("projectId")
     github_org = request.form.get("githubOrg")
     github_repo = request.form.get("githubRepo")
-    if any([item is None for item in [project_id, github_org, github_repo]]):
+    editor_type = request.form.get("editor_type")
+    addIssueLink = request.form.get("addIssueLink")
+
+    if issueNumber is None and any(
+        [item is None for item in [project_id, github_org, github_repo]]
+    ):
         return Response("Malformed POST request", status=400)
 
-    # Make sure that the requested github organisation/repository combination actually exists:
-    try:
-        github.get(f"repos/{github_org}/{github_repo}")
-    except GitHubError:
+    logger.debug(f"Got editor type: {editor_type}")
+
+    issueDetails = None
+    if issueNumber:
+        # Retrieve all the information from the issue
+        # GET /repos/:owner/:repo/issues/:issue_number
+        issueData = github.get(
+            f'repos/{app.config["GITHUB_ORG"]}/'
+            f'{editor_types["registry"]["repo"]}/'
+            f"issues/{issueNumber}"
+        )["body"]
+        logger.debug(f"Got issue body {issueData}")
+        try:
+            issueDetails = yaml.load(issueData, Loader=yaml.SafeLoader)
+            # Remove keys not needed for the registry metadata
+            del issueDetails["related_ontologies"]
+            del issueDetails["intended_use"]
+            del issueDetails["data_source"]
+            del issueDetails["remarks"]
+
+            ontologyLocation = issueDetails["homepage"]
+            project_id = issueDetails["id"]
+            githuburl = re.match(r"https?://github\.com/(.*)/(.*)", ontologyLocation)
+            if githuburl and github_org is None and github_repo is None:
+                github_org = githuburl.group(1)
+                github_repo = githuburl.group(2)
+                logger.debug(f"Got github details: {github_org}, {github_repo}")
+        except (yaml.YAMLError, TypeError) as err:
+            error_message = format(err)
+            return render_template(
+                "prepare_new_config.jinja2",
+                login=g.user.github_login,
+                project_id=project_id,
+                github_org=github_org,
+                github_repo=github_repo,
+                error_message=f"Not able to parse YAML metadata in the issue {issueNumber}, "
+                              f"due to: <i>{error_message}</i>. Please "
+                              f"<a href='http://github.com/{app.config['GITHUB_ORG']}/"
+                              f"{editor_types['registry']['repo']}/issues/{issueNumber}' "
+                              f"target = '_new'>visit the issue</a> to correct the YAML metadata, "
+                              f"or alternatively enter the required GitHub information below."
+            )
+
+    if dev and editor_type is None:  # First step
+        try:
+            github.get(f"repos/{github_org}/{github_repo}")
+        except GitHubError:
+            return render_template(
+                "prepare_new_config.jinja2",
+                login=g.user.github_login,
+                project_id=project_id,
+                github_org=github_org,
+                github_repo=github_repo,
+                error_message=f"The GitHub repository at {github_org}/{github_repo} does not exist"
+            )
+        # If issueDetails have not been loaded, populate an empty template
+        if issueDetails is None:
+            # Generate an empty template
+            issueDetails = {}
+            issueDetails["title"] = ""
+            issueDetails["id"] = project_id
+            issueDetails["homepage"] = f"https://github.org/{github_org}/{github_repo}/"
+            issueDetails[
+                "tracker"
+            ] = f"https://github.org/{github_org}/{github_repo}/issues"
+            issueDetails["contact"] = {
+                "label": "",
+                "email": "",
+                "github_username": g.user.github_login,
+            }
+            issueDetails["license"] = {"url": "", "label": ""}
+            issueDetails["description"] = ""
+            issueDetails["domain"] = ""
+
+        # Generate text for initial registry config
+        registryYamlText = yaml.dump(
+            {
+                "layout": "ontology_detail",
+                **issueDetails,
+                "products": [{"id": f"{project_id.lower()}.owl"}],
+                "activity_status": "active",
+            },
+            sort_keys=False,
+        )
+        registryYamlText = app.config["NEW_PROJECT_REGISTRY_TEMPLATE"].format(
+            idspace_lower=project_id.lower(),
+            yaml_registry_details=registryYamlText,
+            description=issueDetails["description"],
+        )
+        logger.debug(f"Got registry yaml text: {registryYamlText}")
+
         return render_template(
-            "prepare_new_config.jinja2",
+            "editor.jinja2",
+            filename=f'{project_id.lower()}{app.config["MARKDOWN_EXT"]}',
+            editor_type="registry",
+            existing=False,
+            yaml=registryYamlText,
+            issueNumber=issueNumber,
             login=g.user.github_login,
-            project_id=project_id,
-            github_org=github_org,
-            github_repo=github_repo,
-            notfound=f"{github_org}/{github_repo} does not exist",
+        )
+    elif not dev or editor_type == "purl":
+        # Generate some text to populate the editor initially with,
+        # based on the new project template,
+        # and then inject it into the jinja2 template for the metadata editor:
+        purlYamlText = app.config["NEW_PROJECT_PURL_TEMPLATE"].format(
+            idspace_upper=project_id.upper(),
+            idspace_lower=project_id.casefold(),
+            org=github_org,
+            git=github_repo,
         )
 
-    # Generate some text to populate the editor initially with, based on the new project template,
-    # and then inject it into the jinja2 template for the metadata editor:
-    yaml = app.config["NEW_PROJECT_TEMPLATE"].format(
-        idspace_upper=project_id.upper(),
-        idspace_lower=project_id.casefold(),
-        org=github_org,
-        git=github_repo,
-    )
-
-    return render_template(
-        "editor.jinja2",
-        filename=f'{project_id.lower()}{app.config["YAML_EXT"]}',
-        existing=False,
-        yaml=yaml,
-        login=g.user.github_login,
-    )
+        return render_template(
+            "editor.jinja2",
+            filename=f'{project_id.lower()}{app.config["YAML_EXT"]}',
+            editor_type="purl",
+            existing=False,
+            yaml=purlYamlText,
+            addIssueLink=addIssueLink,
+            login=g.user.github_login,
+        )
+    else:
+        return Response("Malformed POST request, unknown editor type", status=400)
 
 
 @app.route("/prepare_new", methods=["GET"])
@@ -401,7 +505,239 @@ def prepare_new():
     process. This endpoint generates a form to request information about the new project from the
     user. Once the form is submitted a request is sent to begin editing the new config.
     """
-    return render_template("prepare_new_config.jinja2", login=g.user.github_login)
+
+    issues = {}
+    issue_list = github.get(
+        f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/' f"issues",
+        params={"state": "open", "labels": "new ontology"},
+    )
+    for issue in issue_list:
+        number = issue["number"]
+        title = issue["title"]
+        logger.debug(f"Got issue: {number}, {title}")
+        issues[number] = title
+
+    return render_template(
+        "prepare_new_config.jinja2", login=g.user.github_login, issueList=issues
+    )
+
+
+@app.route("/foundry_reg", methods=["GET"])
+@verify_logged_in
+def prepare_foundry():
+    """
+    Handles a request to create a new OBO Foundry ontology registration.
+    """
+    github_user = github.get("/user")
+
+    github_name = github_user["name"]
+    github_email = github_user["email"] if "email" in github_user else None
+
+    return render_template(
+        "new_foundry_reg.jinja2",
+        login=g.user.github_login,
+        contactPerson=github_name,
+        contactGitHub=g.user.github_login,
+        contactEmail=github_email,
+    )
+
+
+@app.route("/foundry_reg", methods=["POST"])
+@verify_logged_in
+def new_foundry():
+    """
+    Handles a POST request to request a new Foundry ontology registration. The parameters
+    expected in the POST body are:
+    ontologyTitle
+    idSpace
+    ontoLoc
+    issueTracker
+    contactPerson
+    contactEmail
+    contactGitHub
+    ontoLicense
+    domain
+    relatedOntos
+    intendedUse
+    dataSource
+    remarks
+    """
+    ontologyTitle = request.form.get("ontologyTitle")
+    idSpace = request.form.get("idSpace")
+    ontoLoc = request.form.get("ontoLoc")
+    contactPerson = request.form.get("contactPerson")
+    contactEmail = request.form.get("contactEmail")
+    contactGitHub = request.form.get("contactGitHub")
+    issueTracker = request.form.get("issueTracker")
+    ontoLicense = request.form.get("ontoLicense")
+    description = request.form.get("description")
+    domain = request.form.get("domain")
+    relatedOntos = request.form.get("relatedOntos")
+    intendedUse = request.form.get("intendedUse")
+    dataSource = request.form.get("dataSource")
+    remarks = request.form.get("remarks")
+
+    if any(
+        [
+            item is None
+            for item in [
+                ontologyTitle,
+                idSpace,
+                ontoLoc,
+                contactPerson,
+                contactEmail,
+                contactGitHub,
+                issueTracker,
+                ontoLicense,
+                description,
+                domain,
+                relatedOntos,
+                intendedUse,
+                dataSource,
+            ]
+        ]
+    ):
+        return Response("Malformed POST request", status=400)
+
+    # Validate the requested ID space is unique across the existing registry
+    registry_configs = github.get(
+        f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/'
+        f'contents/{editor_types["registry"]["dir"]}'
+    )
+    if not registry_configs:
+        raise Exception("Could not get contents of the registry config directory")
+    registry_config_ids = [
+        rc["name"].casefold().replace(app.config["MARKDOWN_EXT"], "")
+        for rc in registry_configs
+    ]
+    if idSpace.casefold() in registry_config_ids:
+        resultType = "failure"
+        print(f"Non-unique ID requested: {idSpace}")
+        return render_template(
+            "new_foundry_reg.jinja2",
+            login=g.user.github_login,
+            resultType=resultType,
+            errorMessage=f"The ID space '{idSpace}' is already in use. Please try "
+            f"a different option. ",
+            ontologyTitle=ontologyTitle,
+            idSpace=idSpace,
+            ontoLoc=ontoLoc,
+            issueTracker=issueTracker,
+            contactPerson=contactPerson,
+            contactEmail=contactEmail,
+            contactGitHub=contactGitHub,
+            ontoLicense=ontoLicense,
+            description=description,
+            domain=domain,
+            relatedOntos=relatedOntos,
+            intendedUse=intendedUse,
+            dataSource=dataSource,
+            remarks=remarks,
+        )
+    # get license URL
+    if ontoLicense == "CC-0":
+        licenseURL = "https://creativecommons.org/share-your-work/public-domain/cc0/"
+    elif ontoLicense == "CC-BY":
+        licenseURL = "https://creativecommons.org/licenses/by/4.0/"
+    else:
+        licenseURL = ""
+    issueDict = {}
+    issueDict["title"] = ontologyTitle
+    issueDict["id"] = idSpace
+    issueDict["homepage"] = ontoLoc
+    issueDict["tracker"] = issueTracker
+    issueDict["contact"] = {
+        "label": contactPerson,
+        "email": contactEmail,
+        "github_username": contactGitHub,
+    }
+    issueDict["license"] = {"url": licenseURL, "label": ontoLicense}
+    issueDict["description"] = description
+    issueDict["domain"] = domain
+    issueDict["related_ontologies"] = relatedOntos
+    issueDict["intended_use"] = intendedUse
+    issueDict["data_source"] = dataSource
+    issueDict["remarks"] = remarks
+
+    issueBody = yaml.dump(issueDict, sort_keys=False)
+    issueTitle = f"New Ontology Request: {ontologyTitle}"
+
+    url = app.config["REGISTRY_REQUEST"]
+    logger.debug(f"About to try to create GitHub new ontology request issue at {url}")
+
+    # Create our issue
+    issue = {"title": issueTitle, "body": issueBody, "labels": ["new ontology"]}
+    # Add the issue to our repository
+    try:
+        response = github.post(url, issue)
+        if response:
+            print(f"Successfully created issue {issueTitle}, response: {response}")
+            resultType = "success"
+        else:
+            resultType = "failure"
+            print(f"Could not create issue {issueTitle}")
+            return render_template(
+                "new_foundry_reg.jinja2",
+                login=g.user.github_login,
+                resultType=resultType,
+                errorMessage="An unknown error occurred, there was no response.",
+                ontologyTitle=ontologyTitle,
+                idSpace=idSpace,
+                ontoLoc=ontoLoc,
+                issueTracker=issueTracker,
+                contactPerson=contactPerson,
+                contactEmail=contactEmail,
+                contactGitHub=contactGitHub,
+                ontoLicense=ontoLicense,
+                description=description,
+                domain=domain,
+                relatedOntos=relatedOntos,
+                intendedUse=intendedUse,
+                dataSource=dataSource,
+                remarks=remarks,
+            )
+    except GitHubError as err:
+        resultType = "failure"
+        print(f"An unexpected error occurred: {err},{err.response.json()['message']}")
+        return render_template(
+            "new_foundry_reg.jinja2",
+            login=g.user.github_login,
+            resultType=resultType,
+            errorMessage=err.response.json()["message"],
+            ontologyTitle=ontologyTitle,
+            idSpace=idSpace,
+            ontoLoc=ontoLoc,
+            issueTracker=issueTracker,
+            contactPerson=contactPerson,
+            contactEmail=contactEmail,
+            contactGitHub=contactGitHub,
+            ontoLicense=ontoLicense,
+            description=description,
+            domain=domain,
+            relatedOntos=relatedOntos,
+            intendedUse=intendedUse,
+            dataSource=dataSource,
+            remarks=remarks,
+        )
+
+    emailDraft = app.config["NEW_ONTOLOGY_EMAIL_TEMPLATE"].format(
+        idSpace=idSpace,
+        ontologyTitle=ontologyTitle,
+        ontoLoc=ontoLoc,
+        domain=domain,
+        issueLink=response["html_url"],
+        contactPerson=contactPerson,
+    )
+
+    return render_template(
+        "new_foundry_reg.jinja2",
+        login=g.user.github_login,
+        resultType=resultType,
+        ontologyTitle=ontologyTitle,
+        idSpace=idSpace,
+        emailDraft=emailDraft,
+        issueURL=response["html_url"],
+    )
 
 
 @app.route("/edit/<editor_type>/<filename>")
@@ -696,13 +1032,13 @@ def commit_to_branch(repo, branch, code, rep_dir, filename, commit_msg, file_sha
         )
 
 
-def create_pr(repo, branch, commit_msg):
+def create_pr(repo, branch, commit_msg, long_msg=""):
     """
     Create a pull request for the given branch in the given repository in github
     """
     response = github.post(
         f"repos/{repo}/pulls",
-        data={"title": commit_msg, "head": branch, "base": "master"},
+        data={"title": commit_msg, "head": branch, "base": "master", "body": long_msg},
     )
     if not response:
         raise Exception(f"Unable to create PR for branch {branch} in {repo}")
@@ -720,6 +1056,7 @@ def add_config():
     code = request.form.get("code")
     commit_msg = request.form.get("commit_msg")
     editor_type = request.form.get("editor_type")
+    long_msg = request.form.get("long_msg")
     if any([item is None for item in [filename, commit_msg, code, editor_type]]):
         return Response("Malformed POST request", status=400)
 
@@ -738,7 +1075,7 @@ def add_config():
             commit_msg,
         )
         logger.info(f"Committed addition of {filename} to branch {new_branch} in {repo}")
-        pr_info = create_pr(repo, new_branch, commit_msg)
+        pr_info = create_pr(repo, new_branch, commit_msg, long_msg)
         logger.info(f"Created a PR for branch {new_branch} in {repo}")
     except Exception as e:
         return Response(format(e), status=400)
