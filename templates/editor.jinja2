@@ -77,6 +77,14 @@ var purlYamlHint = function(editor, options) {
   // the letters that have been typed so far.
   var prevString = thisLine.slice(0, currStart);
   var context = getContext();
+  {% for schema_item in schema_file['properties'] %}
+     {% if 'description' in schema_file['properties'][schema_item] %}
+        if (context === '{{schema_item}}') {
+             $("#help-area").show();
+             $("#help-area").html("{{schema_file['properties'][schema_item]['description']}}");
+        }
+     {% endif %}
+  {% endfor %}
   
   if (prevString === '') {
     return {list: pruneReplacementList([
