@@ -96,18 +96,14 @@ except Exception as e:
     logger.error(f"Could not retrieve PURL schema: {e}")
     purl_schema = {}
 
-# Load the set of REGISTRY validation schemas:
+# Load the REGISTRY validation schema:
 try:
-    registry_schemas = {}
-    for schema_file in app.config["REGISTRY_SCHEMA_FILES"]:
-        schema_name = schema_file.replace(".json", "")
-        registry_schema_text = urlopen(app.config["REGISTRY_SCHEMA_DIR"] + schema_file)
-        if registry_schema_text.getcode() == 200:
-            registry_schema = json.load(registry_schema_text)
-            registry_schemas[schema_name] = registry_schema
+    registry_schema_text = urlopen(app.config["REGISTRY_SCHEMA"])
+    if registry_schema_text.getcode() == 200:
+        registry_schema = json.load(registry_schema_text)
 except Exception as e:
     logger.error(f"Could not retrieve REGISTRY schema: {e}")
-    registry_schemas = {}
+    registry_schema = {}
 
 
 class User(Base):
@@ -409,11 +405,11 @@ def edit_new():
                 github_org=github_org,
                 github_repo=github_repo,
                 error_message=f"Not able to parse YAML metadata in the issue {issueNumber}, "
-                              f"due to: <i>{error_message}</i>. Please "
-                              f"<a href='http://github.com/{app.config['GITHUB_ORG']}/"
-                              f"{editor_types['registry']['repo']}/issues/{issueNumber}' "
-                              f"target = '_new'>visit the issue</a> to correct the YAML metadata, "
-                              f"or alternatively enter the required GitHub information below."
+                f"due to: <i>{error_message}</i>. Please "
+                f"<a href='http://github.com/{app.config['GITHUB_ORG']}/"
+                f"{editor_types['registry']['repo']}/issues/{issueNumber}' "
+                f"target = '_new'>visit the issue</a> to correct the YAML metadata, "
+                f"or alternatively enter the required GitHub information below.",
             )
 
     if dev and editor_type is None:  # First step
@@ -426,7 +422,7 @@ def edit_new():
                 project_id=project_id,
                 github_org=github_org,
                 github_repo=github_repo,
-                error_message=f"The GitHub repository at {github_org}/{github_repo} does not exist"
+                error_message=f"The GitHub repository at {github_org}/{github_repo} does not exist",
             )
         # If issueDetails have not been loaded, populate an empty template
         if issueDetails is None:
@@ -757,6 +753,8 @@ def edit_config(editor_type, filename):
     if not config_file:
         raise Exception(f"Could not get the contents of: {filename}")
 
+    schema_file = purl_schema if editor_type == "purl" else registry_schema
+
     decodedBytes = base64.b64decode(config_file["content"])
     decodedStr = str(decodedBytes, "utf-8")
     return render_template(
@@ -766,6 +764,7 @@ def edit_config(editor_type, filename):
         yaml=decodedStr,
         filename=config_file["name"],
         login=g.user.github_login,
+        schema_file=schema_file,
     )
 
 
@@ -780,26 +779,29 @@ def validate():
     output of the error.
     """
 
-    def handle_schema_error(err, code, result_type):
+    def handle_schema_error(err, code, result_type, schema):
         """
         Given a schema validation error in a block of code, create a JSON message with line
         number
         :param err: The schema validation error
         :param code: The block of code in which the schema validation failed
         :param result_type: Levels: e.g. 'error', 'warning', 'info'
+        :param schema: The original schema that was passed to the test
         :return: A JSON response object
         """
         if result_type == "error":
             status = 400
         else:
             status = 200
-        err_field = list(err.absolute_path)[-1] # last entry
-        error_summary = f"'{err_field}' {(err.schema.get('description') or err.message)}"
         logger.debug(f"Determining line number for error: {list(err.absolute_path)}")
         start = 0
-        if not err.absolute_path:
+        error_summary = err.message
+        if not err.absolute_schema_path:
             start = -1
         else:
+            err_descr = err.schema.get("description")  # error schema description
+            if err_descr:
+                error_summary = f"{err.message} ({err_descr})"
             for component in err.absolute_path:
                 if type(component) is str:
                     block_label = component
@@ -884,6 +886,7 @@ def validate():
         code = request.form["code"]
         editor_type = request.form["editor_type"]
         if editor_type == "purl":
+            s = purl_schema
             yaml_source = yaml.load(code, Loader=yaml.SafeLoader)
             jsonschema.validate(yaml_source, purl_schema)
         elif editor_type == "registry":
@@ -899,46 +902,45 @@ def validate():
                 )
             yaml_code = code_sections[1]
             yaml_source = yaml.load(yaml_code, Loader=yaml.SafeLoader)
-            for s in registry_schemas.values():
-                try:
-                    jsonschema.validate(yaml_source, s)
-                except jsonschema.exceptions.ValidationError as err:
-                    logger.debug(
-                        f"JSON validation error in {list(err.absolute_schema_path)} "
-                        f":: {list(err.relative_schema_path)} "
-                    )
-                    # What is the level and title for this error?
-                    if "level" in err.schema and "title" in err.schema:
-                        result_type = err.schema["level"]
-                        title = err.schema["title"]
-                        logger.debug(
-                            f"Normal approach: got level {result_type} and title {title}"
-                        )
-                    else:
-                        error_path = list(err.absolute_schema_path)
-                        parent_schema = s
-                        if "allOf" in error_path:
-                            parent = error_path[error_path.index("allOf") + 1]
-                            parentSubset = parent_schema["allOf"][parent]
-                            title = parentSubset["title"]
-                            result_type = parentSubset["level"]
-                            logger.debug(
-                                f"Parsing approach: Got level {result_type} and title {title}"
-                            )
-                    if "is_obsolete" in yaml_source and yaml_source["is_obsolete"]:
-                        logger.debug(
-                            "Demoting schema error level for obsolete registry entry"
-                        )
-                        if result_type == "error":
-                            result_type = "warning"
-                        elif result_type == "warning":
-                            result_type = "info"
+            s = registry_schema
+            try:
+                jsonschema.validate(yaml_source, s)
+            except jsonschema.exceptions.ValidationError as err:
+                logger.debug(
+                    f"JSON validation error in {list(err.absolute_schema_path)} "
+                    f":: {list(err.relative_schema_path)} "
+                )
+                title = list(err.absolute_schema_path)[0]  # first entry
+                if title == "required":
+                    field_names = re.findall(r"\'(.*?)\'", err.message)  # Get which field
+                    if len(field_names) > 0:
+                        title = field_names[0]
+                if title == "properties":
+                    title = list(err.absolute_schema_path)[
+                        1
+                    ]  # Which property? Second entry
+                logger.debug(f"Got error title {title}")
+                # What is the level of this error?
+                if "level" in err.schema:
+                    result_type = err.schema["level"]
+                    logger.debug(f"Got error level: {result_type}")
+                else:
+                    logger.debug(f"No error level found in {err.schema}")
+                    result_type = "warning"
 
-                    # result_type = s["level"]
-                    if result_type not in results:
-                        results[result_type] = {}
-                    response = handle_schema_error(err, code, result_type)
-                    results[result_type][title] = response
+                if "is_obsolete" in yaml_source and yaml_source["is_obsolete"]:
+                    logger.debug(
+                        "Demoting schema error level for obsolete registry entry"
+                    )
+                    if result_type == "error":
+                        result_type = "warning"
+                    elif result_type == "warning":
+                        result_type = "info"
+
+                if result_type not in results:
+                    results[result_type] = {}
+                response = handle_schema_error(err, code, result_type, s)
+                results[result_type][title] = response
             logger.debug(f"Got schema validation results: {results}")
             for result_type in ["error", "warning", "info"]:
                 if (
@@ -963,7 +965,7 @@ def validate():
             400,
         )
     except jsonschema.exceptions.ValidationError as err:
-        return handle_schema_error(err, code, "error")
+        return handle_schema_error(err, code, "error", s)
 
     return Response(status=200)
 

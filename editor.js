@@ -47,6 +47,7 @@ function showAlertFor(text, style, extraText='') {
     });
 }
 
+
 /**
  * Handler to allow search of the ontologies table
  */
@@ -128,7 +129,6 @@ if (document.getElementById("code")) {
     }
   });
 
-
   /**
    * Add our custom hinting function to the editor
    */
@@ -167,137 +167,6 @@ if (document.getElementById("code")) {
 }
 
 
-/**
- * Generates completion hints depending on the current cursor position of the yaml file
- */
-var purlYamlHint = function(editor, options) {
-  var cursor = editor.getCursor();
-  var thisLine = editor.getLine(cursor.line);
-  var currEnd = cursor.ch;
-  var currStart = currEnd;
-
-  // Look left and right from the current cursor position to have in view the entire word at that
-  // location:
-  while (currStart && /[:\/\w]+/.test(thisLine.charAt(currStart - 1))) {
-    --currStart;
-  }
-  while (currEnd && /[:\/\w]+/.test(thisLine.charAt(currEnd))) {
-    ++currEnd;
-  }
-  var currWord = thisLine.slice(currStart, currEnd);
-
-  var getContext = function() {
-    /* Finds the nearest root-level directive above the current line (if one exists) and returns its
-       name. */
-    var lineNum = cursor.line;
-    var matches = /^(\w+):/.exec(editor.getLine(lineNum));
-    while (!matches && lineNum > 0) {
-      matches = /^(\w+):/.exec(editor.getLine(--lineNum));
-    }
-    return matches && matches[1];
-  };
-
-  // The beginning and ending positions of the text that will be replaced if a completion
-  // hint is selected:
-  var from = CodeMirror.Pos(cursor.line, currStart);
-  var to = CodeMirror.Pos(cursor.line, currEnd);
-
-  // If there is no word here just return an empty list:
-  if (currStart === currEnd) {
-    return {list: [], from: from, to: to}
-  }
-
-  var pruneReplacementList = function(replacementList) {
-    /* Prunes the given list of completions to only those which begin with the current word.
-       If none match, then returns the entire list.
-       If there is only one match and it is exact, return nothing.  */
-    prunedList = replacementList.filter(function(r) {
-      return (new RegExp("^" + currWord).test(r['displayText']));
-    });
-    if (!prunedList || prunedList.length === 0) {
-      return replacementList;
-    }
-    else if (prunedList.length === 1 && prunedList[0]['displayText'] === currWord) {
-      return [];
-    }
-    else {
-      return prunedList;
-    }
-  };
-
-  // Send back a completion hint list contextualised to the current position as well as to
-  // the letters that have been typed so far.
-  var prevString = thisLine.slice(0, currStart);
-  var context = getContext();
-  if (prevString === '') {
-    return {list: pruneReplacementList([{displayText: 'base_redirect:', text: 'base_redirect: '},
-                                        {displayText: 'base_url:', text: 'base_url: '},
-                                        {displayText: 'entries:', text: 'entries:\n- '},
-                                        {displayText: 'example_terms:', text: 'example_terms:\n- '},
-                                        {displayText: 'idspace:', text: 'idspace: '},
-                                        {displayText: 'products:', text: 'products:\n- '},
-                                        {displayText: 'term_browser:', text: 'term_browser: '},
-                                        {displayText: 'tests:', text: 'tests:\n- from: \n  to: '}]),
-            from: from, to: to};
-  }
-  else if (/^term_browser:\s+$/.test(prevString)) {
-    return {list: pruneReplacementList([{displayText: 'ontobee', text: 'ontobee'},
-                                        {displayText: 'custom', text: 'custom'}]),
-            from: from, to: to};
-  }
-  else if (/^base_url:\s+$/.test(prevString) && !(/^\/obo\//.test(currWord))) {
-    return {list: pruneReplacementList([{displayText: '/obo/', text: '/obo/'}]),
-            from: from, to: to};
-  }
-  else if (/^-\s+$/.test(prevString) && context === 'tests') {
-    return {list: pruneReplacementList([{displayText: 'from:', text: 'from: \n  to: '},
-                                        {displayText: 'to:', text: 'to: '}]),
-            from: from, to: to};
-  }
-  else if (/^\s*-\s+from:\s+$/.test(prevString) && (context === 'tests' || context === 'entries') &&
-           !(/^\//.test(currWord))) {
-    return {list: pruneReplacementList([{displayText: '/', text: '/'}]),
-            from: from, to: to};
-  }
-  else if (/^\s+to:\s+$/.test(prevString) && (context === 'tests' || context === 'entries') &&
-           !(/^(https?|ftp):\/\//.test(currWord))) {
-    return {list: pruneReplacementList([{displayText: 'http://', text: 'http://'},
-                                        {displayText: 'https://', text: 'https://'},
-                                        {displayText: 'ftp://', text: 'ftp://'},]),
-            from: from, to: to};
-  }
-  else if (/^-\s+$/.test(prevString) && context === 'entries') {
-    return {list: pruneReplacementList([{displayText: 'exact:', text: 'exact: \n  replacement: '},
-                                        {displayText: 'prefix:', text: 'prefix: \n  replacement: '},
-                                        {displayText: 'regex:', text: 'regex: \n  replacement: '}]),
-            from: from, to: to};
-  }
-  else if (prevString === '  ' && context === 'entries') {
-    return {list: pruneReplacementList([{displayText: 'replacement:', text: 'replacement: '},
-                                        {displayText: 'status:', text: 'status: '},
-                                        {displayText: 'tests:', text: 'tests:\n  - from: \n    to: '}]),
-            from: from, to: to};
-  }
-  else if (/^-\s+(exact|prefix):\s+$/.test(prevString) && context === 'entries' &&
-           !(/^\//.test(currWord))) {
-    return {list: pruneReplacementList([{displayText: '/', text: '/'}]),
-            from: from, to: to};
-  }
-  else if (/^\s+replacement:\s+$/.test(prevString) && context === 'entries' &&
-           !(/^(https?|ftp):\/\//.test(currWord))) {
-    return {list: pruneReplacementList([{displayText: 'http://', text: 'http://'},
-                                        {displayText: 'https://', text: 'https://'},
-                                        {displayText: 'ftp://', text: 'ftp://'},]),
-            from: from, to: to};
-  }
-  else if (/^\s+status:\s+$/.test(prevString) && context === 'entries' &&
-           !(/^(permanent|temporary|see other):\/\//.test(currWord))) {
-    return {list: pruneReplacementList([{displayText: 'permanent', text: 'permanent'},
-                                        {displayText: 'temporary', text: 'temporary'},
-                                        {displayText: 'see other', text: 'see other'}]),
-            from: from, to: to};
-  }
-};
 
 /**
  * Validates the contents of the editor, displaying the validation result in the status area.
@@ -350,15 +219,15 @@ var validate = function(filename, editor_type) {
          try { //Parse JSON if possible, use "result type" to decide message
             var response = JSON.parse(request.responseText);
             if (response.result_type === 'error') {
-                alertText = 'Validation failed';
+                alertText = 'Validation failed ';
                 alertLevel = "alert-danger";
                 get_commit_btn().disabled = true;
             } else if (response.result_type === 'warning') {
-                alertText = 'Warning';
+                alertText = 'Warning ';
                 alertLevel = "alert-warning";
                 get_commit_btn().disabled = false;
             } else if (response.result_type === 'info') {
-                alertText = 'Information';
+                alertText = 'Information ';
                 alertLevel = "alert-info";
                 get_commit_btn().disabled = false;
             } else {
