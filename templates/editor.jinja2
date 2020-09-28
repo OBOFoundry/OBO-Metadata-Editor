@@ -78,23 +78,47 @@ var purlYamlHint = function(editor, options) {
   var prevString = thisLine.slice(0, currStart);
   var context = getContext();
   {% for schema_item in schema_file['properties'] %}
-     {% if 'description' in schema_file['properties'][schema_item] %}
         if (context === '{{schema_item}}') {
              $("#help-area").show();
-             $("#help-area").html("{{schema_file['properties'][schema_item]['description']}}");
+             {% if 'description' in schema_file['properties'][schema_item] %}
+                $("#help-area").html("{{schema_item}}: {{schema_file['properties'][schema_item]['description']}}");
+             {% else %}
+                $("#help-area").html("{{schema_item}}");
+             {% endif %}
         }
-     {% endif %}
   {% endfor %}
-  
+
   if (prevString === '') {
     return {list: pruneReplacementList([
         {% for schema_item in schema_file['properties'] %}
             {% if 'suggest' not in schema_file['properties'][schema_item]
                or schema_file['properties'][schema_item]['suggest'] == True  %}
-                 {% if schema_file['properties'][schema_item]['type'] == 'array' %}
-                    {displayText: '{{schema_item}}:', text: '{{schema_item}}: \n - '},
-                 {% elif schema_file['properties'][schema_item]['type'] == 'object' %}
-                     {displayText: '{{schema_item}}:', text: '{{schema_item}}: \n  '},
+                 {% if 'suggestion' in schema_file['properties'][schema_item] %}
+                    {% if schema_file['properties'][schema_item]['type']=='array' %}
+                        {displayText: '{{schema_item}}:', text: '{{schema_item}}:\n- {{schema_file['properties'][schema_item]['suggestion']}}'},
+                    {% elif schema_file['properties'][schema_item]['type']=='object' %}
+                        {displayText: '{{schema_item}}:', text: '{{schema_item}}:\n  {{schema_file['properties'][schema_item]['suggestion']}}'},
+                    {% else %}
+                        {displayText: '{{schema_item}}:', text: '{{schema_item}}: {{schema_file['properties'][schema_item]['suggestion']}}'},
+                    {% endif %}
+                 {% elif schema_file['properties'][schema_item]['type'] == 'array' %}
+                    {% if schema_file['properties'][schema_item]['items']['type'] == 'object' and
+                        'properties' in schema_file['properties'][schema_item]['items'] %}
+                        {displayText: '{{schema_item}}:', text: '{{schema_item}}: \n- '
+                        {% for array_prop in schema_file['properties'][schema_item]['items']['properties'] %}
+                           + '{{array_prop}}: \n  '
+                           {% endfor %}
+                        },
+                    {% else %}
+                        {displayText: '{{schema_item}}:', text: '{{schema_item}}: \n- '},
+                    {% endif %}
+                 {% elif schema_file['properties'][schema_item]['type'] == 'object' and
+                     'properties' in schema_file['properties'][schema_item] %}
+                     {displayText: '{{schema_item}}:', text: '{{schema_item}}: \n  '
+                        {% for obj_prop in schema_file['properties'][schema_item]['properties'] %}
+                          + '{{obj_prop}}: \n  '
+                        {% endfor %}
+                     },
                  {% else %}
                      {displayText: '{{schema_item}}:', text: '{{schema_item}}: '},
                  {% endif %}
@@ -105,90 +129,62 @@ var purlYamlHint = function(editor, options) {
   }
   {% for schema_item in schema_file['properties'] %}
   {% if schema_file['properties'][schema_item]['type'] == 'array' %}
-    else if (/^\s*-\s+$/.test(prevString) && context === '{{schema_item}}') {
+    else if ( (/^\s*-\s+$/.test(prevString) || /^\s*\s+$/.test(prevString) ) && context === '{{schema_item}}') {
        return {list: pruneReplacementList([
           {% for sub_schema_item in schema_file['properties'][schema_item]['items']['properties'] %}
-                  {displayText: '{{sub_schema_item}}:', text: '{{sub_schema_item}}: '},
+              {displayText: '{{sub_schema_item}}:', text: '{{sub_schema_item}}: '},
           {% endfor %}
               ]),
               from: from, to: to};
     }
+    {% for sub_schema_item in schema_file['properties'][schema_item]['items']['properties'] %}
+       {% if schema_file['properties'][schema_item]['items']['properties'][sub_schema_item]['type'] == 'object' %}
+        else if (/^\s+{{sub_schema_item}}:\s+$/.test(prevString) && context === '{{schema_item}}') {
+          return {list: pruneReplacementList([
+          {% for sub_sub_schema_item in schema_file['properties'][schema_item]['items']['properties'][sub_schema_item]['properties'] %}
+              {displayText: '{{sub_sub_schema_item}}:', text: '{{sub_sub_schema_item}}: '},
+          {% endfor %}
+              ]),
+              from: from, to: to};
+        }
+       {% elif  schema_file['properties'][schema_item]['items']['properties'][sub_schema_item]['type'] == 'string'
+          and 'enum' in schema_file['properties'][schema_item]['items']['properties'][sub_schema_item] %}
+        else if (/^\s+{{sub_schema_item}}:\s+$/.test(prevString) && context === '{{schema_item}}') {
+          return {list: pruneReplacementList([
+          {% for enum_sub_schema_item in schema_file['properties'][schema_item]['items']['properties'][sub_schema_item]['enum'] %}
+              {displayText: '{{enum_sub_schema_item}}', text: '{{enum_sub_schema_item}} '},
+          {% endfor %}
+              ]),
+              from: from, to: to};
+        }
+       {% endif %}
+    {% endfor %}
   {% elif schema_file['properties'][schema_item]['type'] == 'object' %}
     else if (prevString === '  ' && context === '{{schema_item}}') {
        return {list: pruneReplacementList([
           {% for sub_schema_item in schema_file['properties'][schema_item]['properties'] %}
-                   {displayText: '{{sub_schema_item}}:', text: '{{sub_schema_item}}: '},
+             {displayText: '{{sub_schema_item}}:', text: '{{sub_schema_item}}: '},
           {% endfor %}
               ]),
               from: from, to: to};
     }
-  {% elif schema_file['properties'][schema_item]['type'] == 'string' and
-    schema_file['properties'][schema_item]['format'] == 'uri' %}
-    else if (/^{{schema_item}}:\s+$/.test(prevString)) {
-      return {list: pruneReplacementList([{displayText: 'http://', text: 'http://'},
+  {% elif schema_file['properties'][schema_item]['type'] == 'string' %}
+     else if (/^{{schema_item}}:\s+$/.test(prevString)) {
+     {% if schema_file['properties'][schema_item]['format'] == 'uri' %}
+          return {list: pruneReplacementList([{displayText: 'http://', text: 'http://'},
                                           {displayText: 'https://', text: 'https://'},
                                           {displayText: 'ftp://', text: 'ftp://'},]),
               from: from, to: to};
+     {% elif 'enum' in schema_file['properties'][schema_item] %}
+            return {list: pruneReplacementList([
+             {% for enum_val in schema_file['properties'][schema_item]['enum']%}
+                 {displayText: '{{enum_val}}', text: '{{enum_val}} '},
+             {% endfor %}
+            ]), from: from, to: to};
+     {% endif %}
     }
   {% endif %}
   {% endfor %}
-  else if (/^term_browser:\s+$/.test(prevString)) {
-    return {list: pruneReplacementList([{displayText: 'ontobee', text: 'ontobee'},
-                                        {displayText: 'custom', text: 'custom'}]),
-            from: from, to: to};
-  }
-  else if (/^base_url:\s+$/.test(prevString) && !(/^\/obo\//.test(currWord))) {
-    return {list: pruneReplacementList([{displayText: '/obo/', text: '/obo/'}]),
-            from: from, to: to};
-  }
-  else if (/^-\s+$/.test(prevString) && context === 'tests') {
-    return {list: pruneReplacementList([{displayText: 'from:', text: 'from: \n  to: '},
-                                        {displayText: 'to:', text: 'to: '}]),
-            from: from, to: to};
-  }
-  else if (/^\s*-\s+from:\s+$/.test(prevString) && (context === 'tests' || context === 'entries') &&
-           !(/^\//.test(currWord))) {
-    return {list: pruneReplacementList([{displayText: '/', text: '/'}]),
-            from: from, to: to};
-  }
-  else if (/^\s+to:\s+$/.test(prevString) && (context === 'tests' || context === 'entries') &&
-           !(/^(https?|ftp):\/\//.test(currWord))) {
-    return {list: pruneReplacementList([{displayText: 'http://', text: 'http://'},
-                                        {displayText: 'https://', text: 'https://'},
-                                        {displayText: 'ftp://', text: 'ftp://'},]),
-            from: from, to: to};
-  }
-  else if (/^-\s+$/.test(prevString) && context === 'entries') {
-    return {list: pruneReplacementList([{displayText: 'exact:', text: 'exact: \n  replacement: '},
-                                        {displayText: 'prefix:', text: 'prefix: \n  replacement: '},
-                                        {displayText: 'regex:', text: 'regex: \n  replacement: '}]),
-            from: from, to: to};
-  }
-  else if (prevString === '  ' && context === 'entries') {
-    return {list: pruneReplacementList([{displayText: 'replacement:', text: 'replacement: '},
-                                        {displayText: 'status:', text: 'status: '},
-                                        {displayText: 'tests:', text: 'tests:\n  - from: \n    to: '}]),
-            from: from, to: to};
-  }
-  else if (/^-\s+(exact|prefix):\s+$/.test(prevString) && context === 'entries' &&
-           !(/^\//.test(currWord))) {
-    return {list: pruneReplacementList([{displayText: '/', text: '/'}]),
-            from: from, to: to};
-  }
-  else if (/^\s+replacement:\s+$/.test(prevString) && context === 'entries' &&
-           !(/^(https?|ftp):\/\//.test(currWord))) {
-    return {list: pruneReplacementList([{displayText: 'http://', text: 'http://'},
-                                        {displayText: 'https://', text: 'https://'},
-                                        {displayText: 'ftp://', text: 'ftp://'},]),
-            from: from, to: to};
-  }
-  else if (/^\s+status:\s+$/.test(prevString) && context === 'entries' &&
-           !(/^(permanent|temporary|see other):\/\//.test(currWord))) {
-    return {list: pruneReplacementList([{displayText: 'permanent', text: 'permanent'},
-                                        {displayText: 'temporary', text: 'temporary'},
-                                        {displayText: 'see other', text: 'see other'}]),
-            from: from, to: to};
-  }
 };
     </script>
 
@@ -209,8 +205,6 @@ var purlYamlHint = function(editor, options) {
        the same to generate the CodeMirror editor.  -->
 
   <textarea id="code" class="hidden">{% if yaml is defined %}{{ yaml }}{% endif %}</textarea>
-
-  <div id="help-area" role="alert" style="display:none" >
 
   </div>
   <div>
@@ -262,6 +256,8 @@ var purlYamlHint = function(editor, options) {
         </div> <!-- details -->
     </div> <!-- details-area -->
   </div> <!-- status-area -->
+
+  <div id="help-area" class="alert alert-info" role="alert" style="display:none" >
 
     <!-- The form that gets displayed on the confirmation box -->
     <div class="form-content" style="display:none;">
