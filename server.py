@@ -764,7 +764,7 @@ def edit_config(editor_type, filename):
         yaml=decodedStr,
         filename=config_file["name"],
         login=g.user.github_login,
-        schema_file=schema_file,
+        schema_file=json.dumps(schema_file)
     )
 
 

@@ -166,7 +166,222 @@ if (document.getElementById("code")) {
 
 }
 
+/**
+ * Generates completion hints depending on the current cursor position of the yaml file
+ */
+var purlYamlHint = function(editor, options) {
+  var cursor = editor.getCursor();
+  var thisLine = editor.getLine(cursor.line);
+  var currEnd = cursor.ch;
+  var currStart = currEnd;
 
+  // Look left and right from the current cursor position to have in view the entire word at that
+  // location:
+  while (currStart && /[:\/\w]+/.test(thisLine.charAt(currStart - 1))) {
+    --currStart;
+  }
+  while (currEnd && /[:\/\w]+/.test(thisLine.charAt(currEnd))) {
+    ++currEnd;
+  }
+  var currWord = thisLine.slice(currStart, currEnd);
+
+  var getContext = function() {
+    /* Finds the nearest root-level directive above the current line (if one exists) and returns its
+       name. */
+    var lineNum = cursor.line;
+    var matches = /^(\w+):/.exec(editor.getLine(lineNum));
+    while (!matches && lineNum > 0) {
+      matches = /^(\w+):/.exec(editor.getLine(--lineNum));
+    }
+    return matches && matches[1];
+  };
+
+  // The beginning and ending positions of the text that will be replaced if a completion
+  // hint is selected:
+  var from = CodeMirror.Pos(cursor.line, currStart);
+  var to = CodeMirror.Pos(cursor.line, currEnd);
+
+  // If there is no word here just return an empty list:
+  if (currStart === currEnd) {
+    return {list: [], from: from, to: to}
+  }
+
+  var pruneReplacementList = function(replacementList) {
+    /* Prunes the given list of completions to only those which begin with the current word.
+       If none match, then returns the entire list.
+       If there is only one match and it is exact, return nothing.  */
+    prunedList = replacementList.filter(function(r) {
+      return (new RegExp("^" + currWord).test(r['displayText']));
+    });
+    if (!prunedList || prunedList.length === 0) {
+      return replacementList;
+    }
+    else if (prunedList.length === 1 && prunedList[0]['displayText'] === currWord) {
+      return [];
+    }
+    else {
+      return prunedList;
+    }
+  };
+
+  // Send back a completion hint list contextualised to the current position as well as to
+  // the letters that have been typed so far.
+  var prevString = thisLine.slice(0, currStart);
+  var context = getContext();
+
+  //Get the edit JSON schema
+  var keyList = Object.keys(editing_schema['properties']);
+  var keyListLength = keyList.length;
+
+  //Context-sensitive help
+  for (var i = 0; i < keyListLength; i++) {
+    var keyValue = keyList[i];
+    if (context === keyValue) {
+      $("#help-area").show();
+      if (editing_schema['properties'][keyValue]['description'] !== undefined) {
+        $("#help-area").html(keyValue + ": "+ editing_schema['properties'][keyValue]['description']);
+      } else {
+        $("#help-area").html(keyValue);
+      }
+    }
+  }
+
+  //Autocomplete suggestions (code completion)
+  if (prevString === '') {
+    var stringList = '[';
+    // Top-level suggestions
+    for (var i = 0; i < keyListLength; i++) {
+        var keyValue = keyList[i];
+        if (editing_schema['properties'][keyValue]['suggest'] === undefined
+             || editing_schema ['properties'][keyValue]['suggest'] === true) {
+             if (editing_schema['properties'][keyValue]['suggestion'] !== undefined) {
+                if ( editing_schema['properties'][keyValue]['type']=='array' ) {
+                  stringList += '{displayText: \''+keyValue+':\', text: \''+keyValue+':\\n- '+editing_schema['properties'][keyValue]['suggestion']+'\'},';
+                } else if (editing_schema['properties'][keyValue]['type'] == 'object') {
+                  stringList += '{displayText: \''+keyValue+':\', text: \''+keyValue+':\\n '+editing_schema['properties'][keyValue]['suggestion']+'\'},';
+                } else {
+                  stringList += '{ displayText: \''+keyValue+':\' , text: \''+keyValue+': '+editing_schema['properties'][keyValue]['suggestion']+'\' },';
+                }
+             } else if ( editing_schema['properties'][keyValue]['type'] === 'array') {
+                if (editing_schema['properties'][keyValue]['items']['type'] === 'object' &&
+                  editing_schema['properties'][keyValue]['items']['properties'] !== undefined ) {
+                    stringList += '{displayText: \''+keyValue+':\' , text: \''+keyValue+': \\n- ';
+                    var subKeyList = Object.keys(editing_schema['properties'][keyValue]['items']['properties']);
+                    var subKeyListLength = subKeyList.length;
+                    for (var j=0; j<subKeyListLength; j++) {
+                       var subKeyValue = subKeyList[j];
+                       stringList += subKeyValue+': \\n  ';
+                    }
+                    stringList += '\' },'
+                } else {
+                    stringList += '{displayText: \''+keyValue+':\', text: \''+keyValue+': \\n- \'},';
+                }
+             } else if (editing_schema['properties'][keyValue]['type'] === 'object') {
+                if (editing_schema['properties'][keyValue]['properties'] !== undefined ) {
+                    stringList += '{displayText: \''+keyValue+':\' , text: \''+keyValue+': \\n ';
+                    var subKeyList = Object.keys(editing_schema['properties'][keyValue]['properties']);
+                    var subKeyListLength = subKeyList.length;
+                    for (var j=0; j<subKeyListLength; j++) {
+                       var subKeyValue = subKeyList[j];
+                       stringList += subKeyValue+': \\n  ';
+                    }
+                    stringList += '\' },'
+                } else {
+                    stringList += '{displayText: \''+keyValue+':\', text: \''+keyValue+': \\n \'},';
+                }
+             } else if (editing_schema['properties'][keyValue]['type'] === 'string' &&
+                editing_schema['properties'][keyValue]['enum'] !== undefined) {
+                  var subKeyList = editing_schema['properties'][keyValue]['enum'];
+                  stringList += '{ displayText: \''+keyValue+':\' , text: \''+keyValue+': '+subKeyList[0]+'\' },';
+             } else {
+                stringList += '{ displayText: \''+keyValue+':\' , text: \''+keyValue+': \' },';
+             }
+        }
+    }
+    stringList += ']';
+    listItems = eval(stringList);
+
+    return {list: pruneReplacementList(listItems),
+            from: from, to: to};
+  }
+
+  //Next-level suggestions
+  for (var i = 0; i < keyListLength; i++) {
+    var keyValue = keyList[i];
+    var keyValRegex = new RegExp("^"+keyValue+":\\s+$");
+    if (keyValRegex.test(prevString)) {
+        var stringList = "[";
+        if (editing_schema['properties'][keyValue]['suggestion'] !== undefined ){
+            suggestion = editing_schema['properties'][keyValue]['suggestion'];
+            suggRegex = new RegExp("^"+suggestion);
+            if (! suggRegex.test(currWord)) {
+                stringList += '{displayText: \''+suggestion+'\' , text: \''+suggestion+'\' },';
+            }
+        }
+        if (editing_schema['properties'][keyValue]['type'] === 'object') {
+            if (editing_schema['properties'][keyValue]['properties'] !== undefined ) {
+                var subKeyList = Object.keys(editing_schema['properties'][keyValue]['properties']);
+                var subKeyListLength = subKeyList.length;
+                for (var j=0; j<subKeyListLength; j++) {
+                   var subKeyValue = subKeyList[j];
+                   stringList += '{displayText: \''+subKeyValue+'\' , text: \''+subKeyValue+' \' },';
+                }
+            }
+        } else if (editing_schema['properties'][keyValue]['type'] === 'array') {
+            if (editing_schema['properties'][keyValue]['items']['properties'] !== undefined ) {
+                var subKeyList = Object.keys(editing_schema['properties'][keyValue]['items']['properties']);
+                var subKeyListLength = subKeyList.length;
+                for (var j=0; j<subKeyListLength; j++) {
+                   var subKeyValue = subKeyList[j];
+                   stringList += '{displayText: \''+subKeyValue+'\' , text: \''+subKeyValue+' \' },';
+                }
+            }
+        } else if (editing_schema['properties'][keyValue]['type'] === 'string') {
+            if (editing_schema['properties'][keyValue]['enum'] !== undefined ) {
+                var subKeyList = editing_schema['properties'][keyValue]['enum'];
+                var subKeyListLength = subKeyList.length;
+                for (var j=0; j<subKeyListLength; j++) {
+                   var subKeyValue = subKeyList[j];
+                   stringList += '{displayText: \''+subKeyValue+'\' , text: \''+subKeyValue+' \' },';
+                }
+            }
+        }
+        stringList += ']';
+        listItems = eval(stringList);
+
+        return {list: pruneReplacementList(listItems),
+            from: from, to: to};
+        }
+
+        if ( (/^-\s+$/.test(prevString) || /^\s+$/.test(prevString) || prevString === '  ') && context === keyValue) {
+            var stringList = "[";
+            if (editing_schema['properties'][keyValue]['type'] === 'array' &&
+             editing_schema['properties'][keyValue]['items']['properties'] !== undefined ) {
+                var subKeyList = Object.keys(editing_schema['properties'][keyValue]['items']['properties']);
+                var subKeyListLength = subKeyList.length;
+                for (var j=0; j<subKeyListLength; j++) {
+                   var subKeyValue = subKeyList[j];
+                   stringList += '{displayText: \''+subKeyValue+':\' , text: \''+subKeyValue+': \' },';
+                }
+            } else if (editing_schema['properties'][keyValue]['type'] === 'object' &&
+             editing_schema['properties'][keyValue]['properties'] !== undefined ) {
+               var subKeyList = Object.keys(editing_schema['properties'][keyValue]['properties']);
+               var subKeyListLength = subKeyList.length;
+                for (var j=0; j<subKeyListLength; j++) {
+                   var subKeyValue = subKeyList[j];
+                   stringList += '{displayText: \''+subKeyValue+':\' , text: \''+subKeyValue+': \' },';
+                }
+            }
+            stringList += ']';
+            listItems = eval(stringList);
+
+            return {list: pruneReplacementList(listItems),
+                from: from, to: to};
+        }
+
+    }
+
+};
 
 /**
  * Validates the contents of the editor, displaying the validation result in the status area.
