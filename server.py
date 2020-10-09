@@ -6,6 +6,7 @@ import json
 import jsonschema
 import logging
 import re
+import requests
 import yaml
 
 from datetime import datetime
@@ -21,10 +22,10 @@ from flask import (
     redirect,
     url_for,
 )
-from flask_github import GitHub, GitHubError
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+from urllib.parse import parse_qs
 from urllib.request import urlopen
 
 # To run in development mode, do:
@@ -36,6 +37,7 @@ from urllib.request import urlopen
 # Note that the following environment variables must be set:
 # GITHUB_CLIENT_ID
 # GITHUB_CLIENT_SECRET
+# GITHUB_APP_STATE
 # FLASK_SECRET_KEY
 
 # Setup the webapp:
@@ -50,9 +52,6 @@ logger.setLevel(app.config["LOG_LEVEL"])
 
 # The filesystem directory where this script is running from:
 pwd = app.config["PWD"]
-
-# Setup github-flask through which we'll communicate with the GitHub API:
-github = GitHub(app)
 
 # Setup sqlalchemy to manage the database of logged in users:
 engine = create_engine(app.config["DATABASE_URI"])
@@ -109,6 +108,69 @@ except Exception as e:
     logger.error(f"Could not retrieve REGISTRY schema: {e}")
     registry_schemas = {}
 
+# URLs and functions used for communicating with GitHub:
+GITHUB_DEFAULT_API_HEADERS = {
+    "Accept": "application/vnd.github.v3+json",
+    "User-Agent": "purl-editor/1.0",
+}
+GITHUB_API_URL = "https://api.github.com"
+GITHUB_OAUTH_URL = "https://github.com/login/oauth"
+
+
+def github_authorize(params):
+    """
+    Call the /authorize endpoint of GitHub's authorization API to authenticate using the given
+    authentication parameters and return GitHub's response.
+    """
+    response = requests.get(GITHUB_OAUTH_URL + "/authorize", params)
+    if not response.ok:
+        response.raise_for_status()
+    return response
+
+
+def github_authorize_token(params):
+    """
+    Call the /access_token endpoint of GitHub's authorization API to authenticate using the given
+    authentication parameters and return GitHub's response, which should contain an access token.
+    """
+    response = requests.post(GITHUB_OAUTH_URL + "/access_token", params)
+    if not response.ok:
+        response.raise_for_status()
+    return response
+
+
+def github_call(method, endpoint, params={}):
+    """
+    Call the GitHub REST API at the given endpoint using the given method and passing the given
+    params.
+    """
+    method = method.casefold()
+    if method not in ["get", "post", "put"]:
+        logger.error(f"Unsupported API method: {method}")
+        return {}
+
+    access_token = g.user.github_access_token
+    if not access_token:
+        logger.error("No token found in the global application context.")
+        return {}
+
+    api_headers = GITHUB_DEFAULT_API_HEADERS
+    api_headers["Authorization"] = f"token {access_token}"
+    if not endpoint.startswith("/"):
+        endpoint = "/" + endpoint
+
+    fargs = {"url": GITHUB_API_URL + endpoint, "headers": api_headers, "json": params}
+    if method == "get":
+        response = requests.get(**fargs)
+    elif method == "post":
+        response = requests.post(**fargs)
+    elif method == "put":
+        response = requests.put(**fargs)
+
+    if not response.ok:
+        response.raise_for_status()
+    return response.json()
+
 
 class User(Base):
     """
@@ -151,33 +213,60 @@ def after_request(response):
     return response
 
 
-@github.access_token_getter
-def token_getter():
-    """
-    Called automatically by github_flask to retrieve the token for the user belonging to
-    the global application context.
-    """
-    user = g.user
-    if user is not None:
-        return user.github_access_token
-
-
 @app.route("/github_callback")
-@github.authorized_handler
-def authorized(access_token):
+def github_callback():
     """
     After the user is authenticated in GitHub, GitHub will redirect to this route, and the
     metadata editor authentication will be finalised on the server.
     """
+
+    def fetch_access_token(args):
+        """
+        Get the temporary code from the given args and use it to fetch a GitHub App access token
+        for the configured client.
+        """
+        temporary_code = args.get("code")
+        params = {
+            "client_id": app.config["GITHUB_CLIENT_ID"],
+            "client_secret": app.config["GITHUB_CLIENT_SECRET"],
+            "code": temporary_code,
+            "state": app.config["GITHUB_APP_STATE"],
+            "redirect_uri": app.config["SERVER_BASE"] + "/github_callback",
+        }
+
+        try:
+            response = github_authorize_token(params)
+        except requests.HTTPError as e:
+            logger.error(e)
+            return None
+
+        content = parse_qs(response.text)
+        access_token = content.get("access_token")
+        if not access_token:
+            logger.error("Could not retrieve access token")
+            return None
+        access_token = access_token[0]
+
+        token_type = content.get("token_type")
+        if not token_type:
+            logger.error("No token type returned")
+            return None
+        token_type = token_type[0]
+        if token_type.casefold() != "bearer":
+            logger.error(f"Unexpected token type retrieved: {token_type}")
+            return None
+
+        return access_token
+
+    if request.args.get("state") != app.config["GITHUB_APP_STATE"]:
+        logger.error("Received wrong state. Aborting authorization due to possible CSRF attack.")
+        return redirect("/logged_out")
+
+    access_token = fetch_access_token(request.args)
     next_url = request.args.get("next") or url_for("index")
-
     if access_token is None:
-        logger.warn(f"No access token received. Redirecting to {next_url}")
-        return redirect(next_url)
-
-    # If this check fails then there may have been an attempted CSRF attack:
-    if request.args.get("state") != app.config["GITHUB_OAUTH_STATE"]:
-        logger.warn("Received unexpected request state; possible CSRF attack")
+        # If we don't receive a token just redirect; an error message should have been written to
+        # the log in the fetch_access_token() function above.
         return redirect(next_url)
 
     # Check to see if we already have the user corresponding to this access token in the db, and add
@@ -191,7 +280,7 @@ def authorized(access_token):
     g.user = user
 
     # Get some other useful information about the user:
-    github_user = github.get("/user")
+    github_user = github_call("GET", "/user")
     g.user.github_id = github_user["id"]
     g.user.github_login = github_user["login"]
 
@@ -205,16 +294,26 @@ def authorized(access_token):
 @app.route("/login")
 def login():
     """
-    Authenticate a user
+    Authenticate a user. For the authentication workflow, see:
+    https://docs.github.com/en/free-pro-team@latest/developers/apps/identifying-and-authorizing-users-for-github-apps
     """
     # If the session already contains a user id, just get rid of it and re-authenticate. This could
     # happen, for example, if the users db gets deleted but the user's browser session still has
     # the user's id in it.
     if session.get("user_id") is not None:
         session.pop("user_id")
-    return github.authorize(
-        scope="public_repo", state=app.config.get("GITHUB_OAUTH_STATE")
-    )
+
+    params = {
+        "client_id": app.config["GITHUB_CLIENT_ID"],
+        "state": app.config["GITHUB_APP_STATE"],
+        "redirect_uri": app.config["SERVER_BASE"] + "/github_callback"
+    }
+    try:
+        response = github_authorize(params)
+        return redirect(response.url)
+    except requests.HTTPError as e:
+        logger.error(e)
+        return redirect(url_for("logged_out"))
 
 
 @app.route("/logged_out")
@@ -259,7 +358,8 @@ def index():
     Renders the index page of the application
     """
     # Get all of the available config files to edit:
-    purl_configs = github.get(
+    purl_configs = github_call(
+        "GET",
         f'repos/{app.config["GITHUB_ORG"]}/{editor_types["purl"]["repo"]}/'
         f'contents/{editor_types["purl"]["dir"]}'
     )
@@ -268,7 +368,8 @@ def index():
 
     if dev:
         # Get all of the available registry config files to edit:
-        registry_configs = github.get(
+        registry_configs = github_call(
+            "GET",
             f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/'
             f'contents/{editor_types["registry"]["dir"]}'
         )
@@ -379,7 +480,8 @@ def edit_new():
     if issueNumber:
         # Retrieve all the information from the issue
         # GET /repos/:owner/:repo/issues/:issue_number
-        issueData = github.get(
+        issueData = github_call(
+            "GET",
             f'repos/{app.config["GITHUB_ORG"]}/'
             f'{editor_types["registry"]["repo"]}/'
             f"issues/{issueNumber}"
@@ -418,8 +520,8 @@ def edit_new():
 
     if dev and editor_type is None:  # First step
         try:
-            github.get(f"repos/{github_org}/{github_repo}")
-        except GitHubError:
+            github_call("GET", f"repos/{github_org}/{github_repo}")
+        except requests.HTTPError:
             return render_template(
                 "prepare_new_config.jinja2",
                 login=g.user.github_login,
@@ -507,7 +609,8 @@ def prepare_new():
     """
 
     issues = {}
-    issue_list = github.get(
+    issue_list = github_call(
+        "GET",
         f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/' f"issues",
         params={"state": "open", "labels": "new ontology"},
     )
@@ -528,7 +631,7 @@ def prepare_foundry():
     """
     Handles a request to create a new OBO Foundry ontology registration.
     """
-    github_user = github.get("/user")
+    github_user = github_call("GET", "/user")
 
     github_name = github_user["name"]
     github_email = github_user["email"] if "email" in github_user else None
@@ -600,7 +703,8 @@ def new_foundry():
         return Response("Malformed POST request", status=400)
 
     # Validate the requested ID space is unique across the existing registry
-    registry_configs = github.get(
+    registry_configs = github_call(
+        "GET",
         f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/'
         f'contents/{editor_types["registry"]["dir"]}'
     )
@@ -669,7 +773,7 @@ def new_foundry():
     issue = {"title": issueTitle, "body": issueBody, "labels": ["new ontology"]}
     # Add the issue to our repository
     try:
-        response = github.post(url, issue)
+        response = github_call("POST", url, issue)
         if response:
             print(f"Successfully created issue {issueTitle}, response: {response}")
             resultType = "success"
@@ -696,7 +800,7 @@ def new_foundry():
                 dataSource=dataSource,
                 remarks=remarks,
             )
-    except GitHubError as err:
+    except requests.HTTPError as err:
         resultType = "failure"
         print(f"An unexpected error occurred: {err},{err.response.json()['message']}")
         return render_template(
@@ -750,7 +854,8 @@ def edit_config(editor_type, filename):
     if editor_type not in editor_types.keys():
         raise Exception(f"Unknown metadata type: {editor_type}")
 
-    config_file = github.get(
+    config_file = github_call(
+        "GET",
         f'repos/{app.config["GITHUB_ORG"]}/{editor_types[editor_type]["repo"]}/'
         f'contents/{editor_types[editor_type]["dir"]}/{filename}'
     )
@@ -972,7 +1077,7 @@ def get_file_sha(repo, rep_dir, filename):
     """
     Get the sha of the given filename from the given github repository
     """
-    response = github.get(f"repos/{repo}/contents/{rep_dir}/{filename}")
+    response = github_call("GET", f"repos/{repo}/contents/{rep_dir}/{filename}")
     if not response or "sha" not in response:
         raise Exception(
             f"Unable to get the current SHA value for {filename} in {repo}/{rep_dir}"
@@ -984,7 +1089,7 @@ def get_master_sha(repo):
     """
     Get the sha for the HEAD of the master branch in the given github repository
     """
-    response = github.get(f"repos/{repo}/git/ref/heads/master")
+    response = github_call("GET", f"repos/{repo}/git/ref/heads/master")
     if not response or "object" not in response or "sha" not in response["object"]:
         raise Exception(f"Unable to get SHA for HEAD of master in {repo}")
     return response["object"]["sha"]
@@ -1001,7 +1106,8 @@ def create_branch(repo, filename, master_sha):
         f"_{datetime.utcnow().strftime('%Y-%m-%d_%H%M%S')}"
     )
 
-    response = github.post(
+    response = github_call(
+        "POST",
         f"repos/{repo}/git/refs", data={"ref": f"refs/heads/{branch}", "sha": master_sha},
     )
     if not response:
@@ -1025,7 +1131,7 @@ def commit_to_branch(repo, branch, code, rep_dir, filename, commit_msg, file_sha
     if file_sha:
         data["sha"] = file_sha
 
-    response = github.put(f"repos/{repo}/contents/{rep_dir}/{filename}", data=data)
+    response = github_call("PUT", f"repos/{repo}/contents/{rep_dir}/{filename}", data=data)
     if not response:
         raise Exception(
             f"Unable to commit addition of {filename} to branch {branch} in {repo}"
@@ -1036,7 +1142,8 @@ def create_pr(repo, branch, commit_msg, long_msg=""):
     """
     Create a pull request for the given branch in the given repository in github
     """
-    response = github.post(
+    response = github_call(
+        "POST",
         f"repos/{repo}/pulls",
         data={"title": commit_msg, "head": branch, "base": "master", "body": long_msg},
     )
@@ -1100,7 +1207,8 @@ def update_config():
         return Response("Malformed POST request", status=400)
 
     # Get the contents of the current version of the file:
-    curr_contents = github.get(
+    curr_contents = github_call(
+        "GET",
         f'repos/{app.config["GITHUB_ORG"]}/{editor_types[editor_type]["repo"]}/'
         f'contents/{editor_types[editor_type]["dir"]}/{filename}'
     )
