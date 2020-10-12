@@ -879,6 +879,17 @@ def validate():
         logger.debug("*** Something went wrong while trying to find the line number ***")
         return start
 
+    # special yaml loader with duplicate key verification
+    class UniqueKeyLoader(yaml.SafeLoader):
+        def construct_mapping(self, node, deep=False):
+            mapping = []
+            for key_node, value_node in node.value:
+                key = self.construct_object(key_node, deep=deep)
+                if key in mapping:
+                    raise yaml.YAMLError(f"The key {key} is duplicated.")
+                mapping.append(key)
+            return super().construct_mapping(node, deep)
+
     if request.form.get("code") is None:
         return Response("Malformed POST request", status=400)
 
@@ -887,7 +898,7 @@ def validate():
         editor_type = request.form["editor_type"]
         if editor_type == "purl":
             s = purl_schema
-            yaml_source = yaml.load(code, Loader=yaml.SafeLoader)
+            yaml_source = yaml.load(code, Loader=UniqueKeyLoader)
             jsonschema.validate(yaml_source, purl_schema)
         elif editor_type == "registry":
             results = {}
@@ -901,7 +912,7 @@ def validate():
                     status=400,
                 )
             yaml_code = code_sections[1]
-            yaml_source = yaml.load(yaml_code, Loader=yaml.SafeLoader)
+            yaml_source = yaml.load(yaml_code, Loader=UniqueKeyLoader)
             s = registry_schema
             try:
                 jsonschema.validate(yaml_source, s)
