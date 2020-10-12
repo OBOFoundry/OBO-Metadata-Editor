@@ -39,6 +39,8 @@ from urllib.request import urlopen
 # GITHUB_CLIENT_SECRET
 # GITHUB_APP_STATE
 # FLASK_SECRET_KEY
+# FLASK_HOST
+# FLASK_PORT
 
 # Setup the webapp:
 app = Flask(__name__)
@@ -231,7 +233,9 @@ def github_callback():
             "client_secret": app.config["GITHUB_CLIENT_SECRET"],
             "code": temporary_code,
             "state": app.config["GITHUB_APP_STATE"],
-            "redirect_uri": app.config["SERVER_BASE"] + "/github_callback",
+            "redirect_uri": "{}:{}/github_callback".format(
+                app.config["FLASK_HOST"], app.config["FLASK_PORT"]
+            ),
         }
 
         try:
@@ -306,7 +310,9 @@ def login():
     params = {
         "client_id": app.config["GITHUB_CLIENT_ID"],
         "state": app.config["GITHUB_APP_STATE"],
-        "redirect_uri": app.config["SERVER_BASE"] + "/github_callback"
+        "redirect_uri": "{}:{}/github_callback".format(
+            app.config["FLASK_HOST"], app.config["FLASK_PORT"]
+        ),
     }
     try:
         response = github_authorize(params)
