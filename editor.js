@@ -233,7 +233,7 @@ var purlYamlHint = function(editor, options) {
   var keyList = Object.keys(editing_schema['properties']);
   var keyListLength = keyList.length;
 
-  //Context-sensitive help
+  //Context-sensitive help based on schema
   for (var i = 0; i < keyListLength; i++) {
     var keyValue = keyList[i];
     if (context === keyValue) {
@@ -246,140 +246,151 @@ var purlYamlHint = function(editor, options) {
     }
   }
 
-  //Autocomplete suggestions (code completion)
-  if (prevString === '') {
-    var stringList = '[';
-    // Top-level suggestions
-    for (var i = 0; i < keyListLength; i++) {
-        var keyValue = keyList[i];
-        if (editing_schema['properties'][keyValue]['suggest'] === undefined
-             || editing_schema ['properties'][keyValue]['suggest'] === true) {
-             if (editing_schema['properties'][keyValue]['suggestion'] !== undefined) {
-                if ( editing_schema['properties'][keyValue]['type']=='array' ) {
-                  stringList += '{displayText: \''+keyValue+':\', text: \''+keyValue+':\\n- '+editing_schema['properties'][keyValue]['suggestion']+'\'},';
-                } else if (editing_schema['properties'][keyValue]['type'] == 'object') {
-                  stringList += '{displayText: \''+keyValue+':\', text: \''+keyValue+':\\n '+editing_schema['properties'][keyValue]['suggestion']+'\'},';
-                } else {
-                  stringList += '{ displayText: \''+keyValue+':\' , text: \''+keyValue+': '+editing_schema['properties'][keyValue]['suggestion']+'\' },';
-                }
-             } else if ( editing_schema['properties'][keyValue]['type'] === 'array') {
-                if (editing_schema['properties'][keyValue]['items']['type'] === 'object' &&
-                  editing_schema['properties'][keyValue]['items']['properties'] !== undefined ) {
-                    stringList += '{displayText: \''+keyValue+':\' , text: \''+keyValue+': \\n- ';
-                    var subKeyList = Object.keys(editing_schema['properties'][keyValue]['items']['properties']);
-                    var subKeyListLength = subKeyList.length;
-                    for (var j=0; j<subKeyListLength; j++) {
-                       var subKeyValue = subKeyList[j];
-                       stringList += subKeyValue+': \\n  ';
-                    }
-                    stringList += '\' },'
-                } else {
-                    stringList += '{displayText: \''+keyValue+':\', text: \''+keyValue+': \\n- \'},';
-                }
-             } else if (editing_schema['properties'][keyValue]['type'] === 'object') {
-                if (editing_schema['properties'][keyValue]['properties'] !== undefined ) {
-                    stringList += '{displayText: \''+keyValue+':\' , text: \''+keyValue+': \\n ';
-                    var subKeyList = Object.keys(editing_schema['properties'][keyValue]['properties']);
-                    var subKeyListLength = subKeyList.length;
-                    for (var j=0; j<subKeyListLength; j++) {
-                       var subKeyValue = subKeyList[j];
-                       stringList += subKeyValue+': \\n  ';
-                    }
-                    stringList += '\' },'
-                } else {
-                    stringList += '{displayText: \''+keyValue+':\', text: \''+keyValue+': \\n \'},';
-                }
-             } else if (editing_schema['properties'][keyValue]['type'] === 'string' &&
-                editing_schema['properties'][keyValue]['enum'] !== undefined) {
-                  var subKeyList = editing_schema['properties'][keyValue]['enum'];
-                  stringList += '{ displayText: \''+keyValue+':\' , text: \''+keyValue+': '+subKeyList[0]+'\' },';
-             } else {
-                stringList += '{ displayText: \''+keyValue+':\' , text: \''+keyValue+': \' },';
-             }
-        }
-    }
-    stringList += ']';
-    listItems = eval(stringList);
-
-    return {list: pruneReplacementList(listItems),
-            from: from, to: to};
-  }
-
-  //Next-level suggestions
+  //Autocomplete suggestions (code completion) based on schema
+  var listItems = []; //Start with an empty array
   for (var i = 0; i < keyListLength; i++) {
     var keyValue = keyList[i];
-    var keyValRegex = new RegExp("^"+keyValue+":\\s+$");
-    if (keyValRegex.test(prevString)) {
-        var stringList = "[";
-        if (editing_schema['properties'][keyValue]['suggestion'] !== undefined ){
-            suggestion = editing_schema['properties'][keyValue]['suggestion'];
-            suggRegex = new RegExp("^"+suggestion);
-            if (! suggRegex.test(currWord)) {
-                stringList += '{displayText: \''+suggestion+'\' , text: \''+suggestion+'\' },';
-            }
-        }
-        if (editing_schema['properties'][keyValue]['type'] === 'object') {
-            if (editing_schema['properties'][keyValue]['properties'] !== undefined ) {
-                var subKeyList = Object.keys(editing_schema['properties'][keyValue]['properties']);
-                var subKeyListLength = subKeyList.length;
-                for (var j=0; j<subKeyListLength; j++) {
-                   var subKeyValue = subKeyList[j];
-                   stringList += '{displayText: \''+subKeyValue+'\' , text: \''+subKeyValue+' \' },';
-                }
-            }
-        } else if (editing_schema['properties'][keyValue]['type'] === 'array') {
-            if (editing_schema['properties'][keyValue]['items']['properties'] !== undefined ) {
-                var subKeyList = Object.keys(editing_schema['properties'][keyValue]['items']['properties']);
-                var subKeyListLength = subKeyList.length;
-                for (var j=0; j<subKeyListLength; j++) {
-                   var subKeyValue = subKeyList[j];
-                   stringList += '{displayText: \''+subKeyValue+'\' , text: \''+subKeyValue+' \' },';
-                }
-            }
-        } else if (editing_schema['properties'][keyValue]['type'] === 'string') {
-            if (editing_schema['properties'][keyValue]['enum'] !== undefined ) {
+    if (editing_schema['properties'][keyValue]['suggest'] === undefined
+           || editing_schema ['properties'][keyValue]['suggest'] === true) {
+      //Top-level suggestions
+      if (prevString === '') {
+           var displayTextStr = keyValue+":";
+           var replacementTextStr = keyValue+':';
+           //Use the schema annotated suggestion if there is one, else build it
+           if (editing_schema['properties'][keyValue]['suggestion'] !== undefined) {
+              if ( editing_schema['properties'][keyValue]['type']=='array' ) {
+                replacementTextStr += '\n- '+editing_schema['properties'][keyValue]['suggestion'];
+              } else if (editing_schema['properties'][keyValue]['type'] == 'object') {
+                replacementTextStr += '\n '+editing_schema['properties'][keyValue]['suggestion'];
+              } else {
+                replacementTextStr += ' '+editing_schema['properties'][keyValue]['suggestion'];
+              }
+           } else if ( editing_schema['properties'][keyValue]['type']=='array' ) {
+               if (editing_schema['properties'][keyValue]['items']['type'] === 'object' &&
+                    editing_schema['properties'][keyValue]['items']['properties'] !== undefined ) {
+                      replacementTextStr += ' \n- ';
+                      var subKeyList = Object.keys(editing_schema['properties'][keyValue]['items']['properties']);
+                      var subKeyListLength = subKeyList.length;
+                      for (var j=0; j<subKeyListLength; j++) {
+                         var subKeyValue = subKeyList[j];
+                         replacementTextStr += subKeyValue+': \n  ';
+                      }
+               } else {
+                      replacementTextStr += '\n- ';
+               }
+           } else if (editing_schema['properties'][keyValue]['type'] === 'object') {
+              if (editing_schema['properties'][keyValue]['properties'] !== undefined ) {
+                  replacementTextStr += '\n  ';
+                  var subKeyList = Object.keys(editing_schema['properties'][keyValue]['properties']);
+                  var subKeyListLength = subKeyList.length;
+                  for (var j=0; j<subKeyListLength; j++) {
+                     var subKeyValue = subKeyList[j];
+                     replacementTextStr += subKeyValue+': \n  ';
+                  }
+              } else {
+                  replacementTextStr += ' \n ';
+              }
+           } else if (editing_schema['properties'][keyValue]['type'] === 'string' &&
+              editing_schema['properties'][keyValue]['enum'] !== undefined) {
                 var subKeyList = editing_schema['properties'][keyValue]['enum'];
-                var subKeyListLength = subKeyList.length;
-                for (var j=0; j<subKeyListLength; j++) {
-                   var subKeyValue = subKeyList[j];
-                   stringList += '{displayText: \''+subKeyValue+'\' , text: \''+subKeyValue+' \' },';
-                }
-            }
-        }
-        stringList += ']';
-        listItems = eval(stringList);
-
-        return {list: pruneReplacementList(listItems),
-            from: from, to: to};
-        }
-
-        if ( (/^-\s+$/.test(prevString) || /^\s+$/.test(prevString) || prevString === '  ') && context === keyValue) {
-            var stringList = "[";
-            if (editing_schema['properties'][keyValue]['type'] === 'array' &&
-             editing_schema['properties'][keyValue]['items']['properties'] !== undefined ) {
-                var subKeyList = Object.keys(editing_schema['properties'][keyValue]['items']['properties']);
-                var subKeyListLength = subKeyList.length;
-                for (var j=0; j<subKeyListLength; j++) {
-                   var subKeyValue = subKeyList[j];
-                   stringList += '{displayText: \''+subKeyValue+':\' , text: \''+subKeyValue+': \' },';
-                }
-            } else if (editing_schema['properties'][keyValue]['type'] === 'object' &&
-             editing_schema['properties'][keyValue]['properties'] !== undefined ) {
-               var subKeyList = Object.keys(editing_schema['properties'][keyValue]['properties']);
-               var subKeyListLength = subKeyList.length;
-                for (var j=0; j<subKeyListLength; j++) {
-                   var subKeyValue = subKeyList[j];
-                   stringList += '{displayText: \''+subKeyValue+':\' , text: \''+subKeyValue+': \' },';
-                }
-            }
-            stringList += ']';
-            listItems = eval(stringList);
-
-            return {list: pruneReplacementList(listItems),
-                from: from, to: to};
-        }
-
+                replacementTextStr += ' '+subKeyList[0];
+           } else {
+              replacementTextStr += ' ';
+           }
+        listItems.push({displayText: displayTextStr, text: replacementTextStr});
+      } else if (prevString === keyValue+": ") { //Second level enum suggestions
+          if (editing_schema['properties'][keyValue]['type'] === 'string') {
+              if (editing_schema['properties'][keyValue]['enum'] !== undefined ) {
+                  var subKeyList = editing_schema['properties'][keyValue]['enum'];
+                  var subKeyListLength = subKeyList.length;
+                  for (var j=0; j<subKeyListLength; j++) {
+                     var subKeyValue = subKeyList[j];
+                     listItems.push({displayText: subKeyValue, text: subKeyValue});
+                  }
+              }
+          }
+      } else if ( context === keyValue && ( /^$/.test(prevString) || /^-\s+$/.test(prevString) ||
+             /^\s+$/.test(prevString) || /^\s\s+$/.test(prevString) ) ) {   //Second level suggestions for arrays and objects
+          if (editing_schema['properties'][keyValue]['type'] === 'object') {
+              if (editing_schema['properties'][keyValue]['properties'] !== undefined ) {
+                  var subKeyList = Object.keys(editing_schema['properties'][keyValue]['properties']);
+                  var subKeyListLength = subKeyList.length;
+                  for (var j=0; j<subKeyListLength; j++) {
+                     var subKeyValue = subKeyList[j];
+                     listItems.push({displayText: subKeyValue+":", text: subKeyValue+": "});
+                  }
+              }
+          } else if (editing_schema['properties'][keyValue]['type'] === 'array') {
+              if (editing_schema['properties'][keyValue]['items']['properties'] !== undefined ) {
+                  var subKeyList = Object.keys(editing_schema['properties'][keyValue]['items']['properties']);
+                  var subKeyListLength = subKeyList.length;
+                  for (var j=0; j<subKeyListLength; j++) {
+                     var subKeyValue = subKeyList[j];
+                     if (editing_schema['properties'][keyValue]['items']['properties'][subKeyValue]['type'] === 'string'
+                      && editing_schema['properties'][keyValue]['items']['properties'][subKeyValue]['enum'] !== undefined ) {
+                        var subSubKeyList = editing_schema['properties'][keyValue]['items']['properties'][subKeyValue]['enum'];
+                        listItems.push({displayText: subKeyValue+":", text: subKeyValue+": "+subSubKeyList[0]});
+                     } else if (editing_schema['properties'][keyValue]['items']['properties'][subKeyValue]['type'] === 'array'
+                      && editing_schema['properties'][keyValue]['items']['properties'][subKeyValue]['items']['properties'] !== undefined ) {
+                        var subSubKeyList = Object.keys(editing_schema['properties'][keyValue]['items']['properties'][subKeyValue]['items']['properties']);
+                        var subSubKeyListLength = subSubKeyList.length;
+                        var replacementTextStr = subKeyValue+": \n";
+                        for (var k=0; k<subSubKeyListLength; k++) {
+                            var subSubKeyValue = subSubKeyList[k];
+                            replacementTextStr += '  '+subSubKeyValue+": \n";
+                        }
+                        listItems.push({displayText: subKeyValue+":", text: replacementTextStr});
+                     } else {
+                        listItems.push({displayText: subKeyValue+":", text: subKeyValue+": "});
+                     }
+                  }
+              }
+          } else if (editing_schema['properties'][keyValue]['suggestion'] !== undefined ){
+              suggestion = editing_schema['properties'][keyValue]['suggestion'];
+              suggRegex = new RegExp("^"+suggestion);
+              if (! suggRegex.test(currWord)) {
+                  listItems.push({displayText: suggestion, text: suggestion});
+              }
+          }
+      }
+      //Third level suggestions for objects nested within arrays
+      if (  editing_schema['properties'][keyValue]['type']=='array' &&
+          editing_schema['properties'][keyValue]['items']['type'] === 'object' &&
+          editing_schema['properties'][keyValue]['items']['properties'] !== undefined ) {
+              var subKeyList = Object.keys(editing_schema['properties'][keyValue]['items']['properties']);
+              var subKeyListLength = subKeyList.length;
+              for (var j=0; j<subKeyListLength; j++) {
+                 var subKeyValue = subKeyList[j];
+                 var subKeyRegex = new RegExp('^\\s+'+subKeyValue+':\\s+$');
+                 if (editing_schema['properties'][keyValue]['items']['properties'][subKeyValue]['type'] === 'array'
+                    && editing_schema['properties'][keyValue]['items']['properties'][subKeyValue]['items']['properties'] !== undefined) {
+                    if (subKeyRegex.test(prevString) && context === keyValue) {
+                        var subSubKeyList = Object.keys(editing_schema['properties'][keyValue]['items']['properties'][subKeyValue]['items']['properties']);
+                        var subSubKeyListLength = subSubKeyList.length;
+                        for (var k=0; k<subSubKeyListLength; k++) {
+                            var subSubKeyValue = subSubKeyList[k];
+                            listItems.push({displayText: subSubKeyValue+":", text: subSubKeyValue+": "});
+                        }
+                    }
+                 } else if ( editing_schema['properties'][keyValue]['items']['properties'][subKeyValue]['type'] === 'string'
+                        && 'enum' in editing_schema['properties'][keyValue]['items']['properties'][subKeyValue] ) {
+                    if (subKeyRegex.test(prevString) && context === keyValue) {
+                        var subSubKeyList = editing_schema['properties'][keyValue]['items']['properties'][subKeyValue]['enum'];
+                        var subSubKeyListLength = subSubKeyList.length;
+                        for (var k=0; k<subSubKeyListLength; k++) {
+                            var subSubKeyValue = subSubKeyList[k];
+                            listItems.push({displayText: subSubKeyValue, text: subSubKeyValue});
+                        }
+                    }
+                 }
+              }
+          }
+      //end of third level suggestions
     }
+  }
+
+  return {list: pruneReplacementList(listItems),
+            from: from, to: to};
 
 };
 
