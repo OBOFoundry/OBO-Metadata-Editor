@@ -16,9 +16,8 @@ pip install -r requirements.txt
 - GITHUB_APP_STATE
 - FLASK_SECRET_KEY
 - FLASK_HOST
-- FLASK_PORT
 
-To obtain the values for the first two settings, send an email to james@overton.ca. For the values of `GITHUB_APP_STATE` and `FLASK_SECRET_KEY`, a randomly generated string may be used. `FLASK_HOST` should be the server address, including the protocol, but without the port, e.g., https://purl-editor.com, or (in the case of local development): http://127.0.0.1. `FLASK_PORT` should be set to the port on which the server will be listening.
+To obtain the values for the first two settings, send an email to james@overton.ca. For the values of `GITHUB_APP_STATE` and `FLASK_SECRET_KEY`, a randomly generated string may be used. `FLASK_HOST` should be the full server address, including the protocol and (optionally) the port, e.g., https://purl-editor.com:5000.
 
 3. Edit the file `config.py` and make sure that the configuration settings are correct. Note in particular the settings for `LOG_LEVEL`, `GITHUB_ORG`, `SCHEMAFILE`, and `ONTOLOGY_METADATA_URL`.
 - `LOG_LEVEL` should be set to one of: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` (_without_ quotes). Note that setting logging to DEBUG will only be effective if FLASK_ENV is set to `development` (the default is `production`)

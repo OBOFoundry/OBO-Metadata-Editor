@@ -40,7 +40,6 @@ from urllib.request import urlopen
 # GITHUB_APP_STATE
 # FLASK_SECRET_KEY
 # FLASK_HOST
-# FLASK_PORT
 
 # Setup the webapp:
 app = Flask(__name__)
@@ -170,6 +169,11 @@ def github_call(method, endpoint, params={}):
         response = requests.put(**fargs)
 
     if not response.ok:
+        if response.status_code == 403:
+            logger.error(
+                f"Received 403 Forbidden from {method} request to endpoint {endpoint}"
+                "with params {params}"
+            )
         response.raise_for_status()
     return response.json()
 
@@ -233,9 +237,7 @@ def github_callback():
             "client_secret": app.config["GITHUB_CLIENT_SECRET"],
             "code": temporary_code,
             "state": app.config["GITHUB_APP_STATE"],
-            "redirect_uri": "{}:{}/github_callback".format(
-                app.config["FLASK_HOST"], app.config["FLASK_PORT"]
-            ),
+            "redirect_uri": "{}/github_callback".format(app.config["FLASK_HOST"]),
         }
 
         try:
@@ -310,9 +312,7 @@ def login():
     params = {
         "client_id": app.config["GITHUB_CLIENT_ID"],
         "state": app.config["GITHUB_APP_STATE"],
-        "redirect_uri": "{}:{}/github_callback".format(
-            app.config["FLASK_HOST"], app.config["FLASK_PORT"]
-        ),
+        "redirect_uri": "{}/github_callback".format(app.config["FLASK_HOST"]),
     }
     try:
         response = github_authorize(params)
@@ -1274,6 +1274,5 @@ init_db()
 if __name__ == "__main__":
     app.run(
         host=app.config["FLASK_HOST"],
-        port=app.config["FLASK_PORT"],
         debug=True if app.config["LOG_LEVEL"] == "DEBUG" else False,
     )

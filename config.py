@@ -10,7 +10,6 @@ LOGGING_CONFIG = "%(asctime)-15s %(name)s %(levelname)s - %(message)s"
 
 # Flask config:
 FLASK_HOST = os.getenv("FLASK_HOST")
-FLASK_PORT = os.getenv("FLASK_PORT")
 
 # The filesystem directory where the metadata editor is running from:
 PWD = os.path.dirname(os.path.realpath(__file__))
