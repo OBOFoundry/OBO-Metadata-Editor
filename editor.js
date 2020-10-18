@@ -11,6 +11,21 @@ var get_commit_btn = function() {
   }
 }
 
+
+/**
+ * Enables and disables the "submit as draft" feature if validations fail
+ */
+let draft = false;
+var set_draft = function(draft_val) {
+    draft = draft_val;
+    var btn_label = get_commit_btn().innerHTML.replace('as draft','');
+    if (draft_val) {
+        get_commit_btn().innerHTML = btn_label+ " as draft";
+    } else {
+        get_commit_btn().innerHTML = btn_label;
+    }
+}
+
 /**
  * Shows or hides an element of text when a link is clicked
  */
@@ -64,6 +79,7 @@ let hasChanged = false;
  * Handler to show popup when you leave the page, only if the code editor has unsaved changes.
  */
 window.addEventListener('beforeunload', (event) => {
+  get_commit_btn.disabled=true;
   if (hasChanged) {
     event.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
   }
@@ -161,6 +177,7 @@ if (document.getElementById("code")) {
   editor.on("changes", function() {
     get_commit_btn().disabled = true;
     hasChanged = true;
+    set_draft(false);
     editor.scrollIntoView(what={line: editor.getCursor().line, ch: 0}, margin=12);
   });
 
@@ -421,13 +438,13 @@ var validate = function(filename, editor_type) {
   }
   if (!actual_idspace) {
     showAlertFor("Validation failed: \'" + idspace_name + ": \' is required", "alert-danger") ;
-    get_commit_btn().disabled = true;
+    get_commit_btn().disabled = true; //Don't enable "submit as draft" option for ID validation failure
     return;
   }
   else if (actual_idspace[1] !== expected_idspace) {
     showAlertFor("Validation failed: \'" + idspace_name + ": " + actual_idspace[1] +
       "\' does not match the expected value: \'" + expected_idspace + "\'", "alert-danger")  ;
-    get_commit_btn().disabled = true;
+    get_commit_btn().disabled = true; //Don't enable "submit as draft" option for ID validation failure
     return;
   }
 
@@ -447,19 +464,23 @@ var validate = function(filename, editor_type) {
             if (response.result_type === 'error') {
                 alertText = 'Validation failed ';
                 alertLevel = "alert-danger";
-                get_commit_btn().disabled = true;
+                get_commit_btn().disabled = false;
+                set_draft(true);
             } else if (response.result_type === 'warning') {
                 alertText = 'Warning ';
                 alertLevel = "alert-warning";
                 get_commit_btn().disabled = false;
+                set_draft(false);
             } else if (response.result_type === 'info') {
                 alertText = 'Information ';
                 alertLevel = "alert-info";
                 get_commit_btn().disabled = false;
+                set_draft(false);
             } else {
                 alertText='Unknown response type: ' + response.result_type;
                 alertLevel="alert-danger";
                 get_commit_btn().disabled = true;
+                set_draft(false);
             }
             // If the line number is valid, then add it to the message
             if (response.line_number) {
@@ -489,10 +510,12 @@ var validate = function(filename, editor_type) {
                 alertText = "Validation successful";
                 alertLevel = "alert-success";
                 get_commit_btn().disabled = false;
+                set_draft(false);
             } else if (request.status === 400) {
                 alertText = 'Validation failed';
                 alertLevel = "alert-danger";
-                get_commit_btn().disabled = true;
+                get_commit_btn().disabled = false;
+                set_draft(true);  //Enable "submit as draft" option
             }
         }
         showAlertFor(alertText,alertLevel,alertTextDetail);
@@ -523,7 +546,7 @@ var add_config = function(filename, editor_type, issueNumber, addIssueLink) {
   }
   // Get a confirmation from the user:
   var modal = bootbox.dialog({
-      message: $(".form-content").html(),
+      message: $("#message-box").html(),
       title: "Please describe the new configuration you would like to add: " +
       projectName,
         buttons: {
@@ -610,6 +633,7 @@ var add_config = function(filename, editor_type, issueNumber, addIssueLink) {
                 request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
                 request.send('filename=' + filename +
                              '&commit_msg=' + msgTitle +
+                             '&draft=' + draft +
                              '&code=' + encodeURIComponent(code) +
                              '&editor_type=' + editor_type +
                              '&long_msg='+ msgBody )
@@ -639,11 +663,12 @@ var update_config = function(filename,editor_type) {
   else if (editor_type == 'purl') {
     $("#descr").attr('value','Updating PURL configuration for '+ projectName);
   }
+
   // Get a confirmation from the user:
   var modal = bootbox.dialog({
     title: "You are about to submit changes. Please describe the changes you have made to " +
       filename.toUpperCase().substring(0, filename.lastIndexOf('.')),
-    message: $(".form-content").html(),
+    message: $("#message-box").html(),
     buttons: {
       confirm: {
         label: 'Submit',
@@ -705,6 +730,7 @@ var update_config = function(filename,editor_type) {
                 request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
                 request.send('filename=' + filename +
                              '&commit_msg=' + commit_msg +
+                             '&draft='+ draft +
                              '&code=' + encodeURIComponent(code) +
                              '&editor_type='+editor_type) +
                              '&long_msg=' + msgBody

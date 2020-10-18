@@ -764,7 +764,7 @@ def edit_config(editor_type, filename):
         yaml=decodedStr,
         filename=config_file["name"],
         login=g.user.github_login,
-        schema_file=json.dumps(schema_file)
+        schema_file=json.dumps(schema_file),
     )
 
 
@@ -1045,13 +1045,19 @@ def commit_to_branch(repo, branch, code, rep_dir, filename, commit_msg, file_sha
         )
 
 
-def create_pr(repo, branch, commit_msg, long_msg=""):
+def create_pr(repo, branch, commit_msg, draft, long_msg=""):
     """
     Create a pull request for the given branch in the given repository in github
     """
     response = github.post(
         f"repos/{repo}/pulls",
-        data={"title": commit_msg, "head": branch, "base": "master", "body": long_msg},
+        data={
+            "title": commit_msg,
+            "head": branch,
+            "base": "master",
+            "draft": draft,
+            "body": long_msg,
+        },
     )
     if not response:
         raise Exception(f"Unable to create PR for branch {branch} in {repo}")
@@ -1069,6 +1075,7 @@ def add_config():
     code = request.form.get("code")
     commit_msg = request.form.get("commit_msg")
     editor_type = request.form.get("editor_type")
+    draft = request.form.get("draft")
     long_msg = request.form.get("long_msg")
     if any([item is None for item in [filename, commit_msg, code, editor_type]]):
         return Response("Malformed POST request", status=400)
@@ -1088,7 +1095,7 @@ def add_config():
             commit_msg,
         )
         logger.info(f"Committed addition of {filename} to branch {new_branch} in {repo}")
-        pr_info = create_pr(repo, new_branch, commit_msg, long_msg)
+        pr_info = create_pr(repo, new_branch, commit_msg, draft, long_msg)
         logger.info(f"Created a PR for branch {new_branch} in {repo}")
     except Exception as e:
         return Response(format(e), status=400)
@@ -1107,6 +1114,7 @@ def update_config():
     filename = request.form.get("filename")
     code = request.form.get("code")
     commit_msg = request.form.get("commit_msg")
+    draft = request.form.get("draft")
     editor_type = request.form.get("editor_type")
 
     if any([item is None for item in [filename, commit_msg, code, editor_type]]):
@@ -1149,7 +1157,7 @@ def update_config():
             file_sha,
         )
         logger.info(f"Committed update of {filename} to branch {new_branch} in {repo}")
-        pr_info = create_pr(repo, new_branch, commit_msg)
+        pr_info = create_pr(repo, new_branch, commit_msg, draft)
         logger.info(f"Created a PR for branch {new_branch} in {repo}")
     except Exception as e:
         return Response(format(e), status=400)

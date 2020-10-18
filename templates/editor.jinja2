@@ -89,9 +89,11 @@
 
   <div id="help-area" class="alert alert-info" role="alert" style="display:none" >
 
+  </div>
+
     <!-- The form that gets displayed on the confirmation box -->
-    <div class="form-content" style="display:none;">
-        <form class="form" role="form">
+  <div id="message-box" class="form-content" style="display:none;">
+      <form class="form" role="form">
           <div class="form-group">
             <label for="commit-msg">Commit message</label>
             <input type="text" class="form-control" id="commit-msg" name="commit-msg">
@@ -100,7 +102,7 @@
             <label for="descr">Detailed description</label>
             <input type="text" class="form-control" id="descr" name="descr">
           </div>
-        </form>
-    </div>
+      </form>
+  </div>
 
 {% endblock %}
