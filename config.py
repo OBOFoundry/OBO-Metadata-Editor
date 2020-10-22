@@ -8,8 +8,8 @@ from logging import DEBUG
 LOG_LEVEL = DEBUG
 LOGGING_CONFIG = "%(asctime)-15s %(name)s %(levelname)s - %(message)s"
 
-FLASK_HOST = ""
-FLASK_PORT = 5000
+# Flask config:
+FLASK_HOST = os.getenv("FLASK_HOST")
 
 # The filesystem directory where the metadata editor is running from:
 PWD = os.path.dirname(os.path.realpath(__file__))
@@ -60,8 +60,7 @@ FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
 DATABASE_URI = "sqlite:////tmp/github-flask.db"
 
 # GitHub OAuth parameters used to access the GitHub API
-GITHUB_OAUTH_APP_NAME = "purl_editor"
-GITHUB_OAUTH_STATE = os.getenv("GITHUB_OAUTH_STATE")
+GITHUB_APP_STATE = os.getenv("GITHUB_APP_STATE")
 GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
 GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
 
