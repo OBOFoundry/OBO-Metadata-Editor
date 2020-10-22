@@ -1114,7 +1114,8 @@ def create_branch(repo, filename, master_sha):
 
     response = github_call(
         "POST",
-        f"repos/{repo}/git/refs", data={"ref": f"refs/heads/{branch}", "sha": master_sha},
+        f"repos/{repo}/git/refs",
+        params={"ref": f"refs/heads/{branch}", "sha": master_sha},
     )
     if not response:
         raise Exception(f"Unable to create new branch {branch} in {repo}")
@@ -1137,7 +1138,7 @@ def commit_to_branch(repo, branch, code, rep_dir, filename, commit_msg, file_sha
     if file_sha:
         data["sha"] = file_sha
 
-    response = github_call("PUT", f"repos/{repo}/contents/{rep_dir}/{filename}", data=data)
+    response = github_call("PUT", f"repos/{repo}/contents/{rep_dir}/{filename}", params=data)
     if not response:
         raise Exception(
             f"Unable to commit addition of {filename} to branch {branch} in {repo}"
@@ -1151,7 +1152,7 @@ def create_pr(repo, branch, commit_msg, long_msg=""):
     response = github_call(
         "POST",
         f"repos/{repo}/pulls",
-        data={"title": commit_msg, "head": branch, "base": "master", "body": long_msg},
+        params={"title": commit_msg, "head": branch, "base": "master", "body": long_msg},
     )
     if not response:
         raise Exception(f"Unable to create PR for branch {branch} in {repo}")
