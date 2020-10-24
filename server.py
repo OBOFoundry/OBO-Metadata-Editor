@@ -261,7 +261,9 @@ def github_callback():
         return access_token
 
     if request.args.get("state") != app.config["GITHUB_APP_STATE"]:
-        logger.error("Received wrong state. Aborting authorization due to possible CSRF attack.")
+        logger.error(
+            "Received wrong state. Aborting authorization due to possible CSRF attack."
+        )
         return redirect("/logged_out")
 
     access_token = fetch_access_token(request.args)
@@ -363,7 +365,7 @@ def index():
     purl_configs = github_call(
         "GET",
         f'repos/{app.config["GITHUB_ORG"]}/{editor_types["purl"]["repo"]}/'
-        f'contents/{editor_types["purl"]["dir"]}'
+        f'contents/{editor_types["purl"]["dir"]}',
     )
     if not purl_configs:
         raise Exception("Could not get contents of the purl config directory")
@@ -373,7 +375,7 @@ def index():
         registry_configs = github_call(
             "GET",
             f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/'
-            f'contents/{editor_types["registry"]["dir"]}'
+            f'contents/{editor_types["registry"]["dir"]}',
         )
         if not registry_configs:
             raise Exception("Could not get contents of the registry config directory")
@@ -486,7 +488,7 @@ def edit_new():
             "GET",
             f'repos/{app.config["GITHUB_ORG"]}/'
             f'{editor_types["registry"]["repo"]}/'
-            f"issues/{issueNumber}"
+            f"issues/{issueNumber}",
         )["body"]
         logger.debug(f"Got issue body {issueData}")
         try:
@@ -708,7 +710,7 @@ def new_foundry():
     registry_configs = github_call(
         "GET",
         f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/'
-        f'contents/{editor_types["registry"]["dir"]}'
+        f'contents/{editor_types["registry"]["dir"]}',
     )
     if not registry_configs:
         raise Exception("Could not get contents of the registry config directory")
@@ -859,7 +861,7 @@ def edit_config(editor_type, filename):
     config_file = github_call(
         "GET",
         f'repos/{app.config["GITHUB_ORG"]}/{editor_types[editor_type]["repo"]}/'
-        f'contents/{editor_types[editor_type]["dir"]}/{filename}'
+        f'contents/{editor_types[editor_type]["dir"]}/{filename}',
     )
     if not config_file:
         raise Exception(f"Could not get the contents of: {filename}")
@@ -1151,7 +1153,9 @@ def commit_to_branch(repo, branch, code, rep_dir, filename, commit_msg, file_sha
     if file_sha:
         data["sha"] = file_sha
 
-    response = github_call("PUT", f"repos/{repo}/contents/{rep_dir}/{filename}", params=data)
+    response = github_call(
+        "PUT", f"repos/{repo}/contents/{rep_dir}/{filename}", params=data
+    )
     if not response:
         raise Exception(
             f"Unable to commit addition of {filename} to branch {branch} in {repo}"
@@ -1162,17 +1166,11 @@ def create_pr(repo, branch, commit_msg, draft, long_msg=""):
     """
     Create a pull request for the given branch in the given repository in github
     """
-    response = github_call(
-        "POST",
-        f"repos/{repo}/pulls",
-        params={
-            "title": commit_msg,
-            "head": branch,
-            "base": "master",
-            "draft": draft,
-            "body": long_msg,
-        }
-    )
+    data = {"title": commit_msg, "head": branch, "base": "master", "body": long_msg}
+    if draft == "true":
+        data["draft"] = True
+    logger.debug(f"PR data={data}")
+    response = github_call("POST", f"repos/{repo}/pulls", params=data)
     if not response:
         raise Exception(f"Unable to create PR for branch {branch} in {repo}")
 
@@ -1238,7 +1236,7 @@ def update_config():
     curr_contents = github_call(
         "GET",
         f'repos/{app.config["GITHUB_ORG"]}/{editor_types[editor_type]["repo"]}/'
-        f'contents/{editor_types[editor_type]["dir"]}/{filename}'
+        f'contents/{editor_types[editor_type]["dir"]}/{filename}',
     )
     if not curr_contents:
         raise Exception(f"Could not get the contents of: {filename}")
