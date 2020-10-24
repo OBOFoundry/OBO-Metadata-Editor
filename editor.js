@@ -732,8 +732,8 @@ var update_config = function(filename,editor_type) {
                              '&commit_msg=' + commit_msg +
                              '&draft='+ draft +
                              '&code=' + encodeURIComponent(code) +
-                             '&editor_type='+editor_type) +
-                             '&long_msg=' + msgBody
+                             '&editor_type='+editor_type +
+                             '&long_msg=' + msgBody)
                 $("*").css("cursor", "progress");
           }
         }

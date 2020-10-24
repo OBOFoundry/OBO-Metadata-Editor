@@ -1228,6 +1228,7 @@ def update_config():
     commit_msg = request.form.get("commit_msg")
     draft = request.form.get("draft")
     editor_type = request.form.get("editor_type")
+    long_msg = request.form.get("long_msg")
 
     if any([item is None for item in [filename, commit_msg, code, editor_type]]):
         return Response("Malformed POST request", status=400)
@@ -1270,7 +1271,7 @@ def update_config():
             file_sha,
         )
         logger.info(f"Committed update of {filename} to branch {new_branch} in {repo}")
-        pr_info = create_pr(repo, new_branch, commit_msg, draft)
+        pr_info = create_pr(repo, new_branch, commit_msg, draft, long_msg)
         logger.info(f"Created a PR for branch {new_branch} in {repo}")
     except Exception as e:
         return Response(format(e), status=400)
