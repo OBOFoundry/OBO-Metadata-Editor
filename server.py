@@ -999,7 +999,16 @@ def validate():
             for key_node, value_node in node.value:
                 key = self.construct_object(key_node, deep=deep)
                 if key in mapping:
-                    raise yaml.YAMLError(f"The key {key} is duplicated.")
+                    logger.debug(
+                        f"The key {key} is duplicated, node {key_node},"
+                        f" line {key_node.start_mark.line+1}."
+                    )
+                    raise yaml.MarkedYAMLError(
+                        None,
+                        None,
+                        f"The key {key} is duplicated, line {key_node.start_mark.line+1}.",
+                        key_node.start_mark,
+                    )
                 mapping.append(key)
             return super().construct_mapping(node, deep)
 
@@ -1077,12 +1086,19 @@ def validate():
             return Response(f"Unknown editor type: {editor_type}", status=400)
 
     except (yaml.YAMLError, TypeError) as err:
+        line_number = -1
+        if hasattr(err, "problem_mark"):
+            mark = err.problem_mark
+            logger.debug(f"Error has position: ({mark.line+1}:{mark.column+1})")
+            line_number = mark.line + 1
+        else:
+            logger.debug(f"Error {err} has no associated line number information.")
         return (
             jsonify(
                 {
                     "result_type": "error",
                     "summary": "YAML parsing error",
-                    "line_number": -1,
+                    "line_number": line_number,
                     "details": format(err),
                 }
             ),
