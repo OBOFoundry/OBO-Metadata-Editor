@@ -892,14 +892,13 @@ def validate():
     output of the error.
     """
 
-    def handle_schema_error(err, code, result_type, schema):
+    def handle_schema_error(err, code, result_type):
         """
         Given a schema validation error in a block of code, create a JSON message with line
         number
         :param err: The schema validation error
         :param code: The block of code in which the schema validation failed
         :param result_type: Levels: e.g. 'error', 'warning', 'info'
-        :param schema: The original schema that was passed to the test
         :return: A JSON response object
         """
         if result_type == "error":
@@ -957,21 +956,20 @@ def validate():
         # and use indent_level to keep track of the current indentation level:
         indent_level = None
         curr_item = 0
-        block_start_found = False
         for i, line in enumerate(codelines):
             # Check to see whether the current line contains the block label we are looking for:
             matched = re.fullmatch(pattern, line)
             if matched:
-                block_start_found = True
                 start = start + i
                 logger.debug(f"Found the start of the block: '{line}' at line {start+1}")
                 # If we've not been instructed to search for an item within the block, we're done:
                 if item < 0:
                     return start
-            elif block_start_found and item >= 0:
+            elif item >= 0:
                 # If the current line does not contain the block label, then if we have found it
                 # previously, and if we are to search for the nth item within the block, then
                 # do that. If this is the first item, then take note of the indentation level.
+                logger.debug(f"Searching for item {item} in block {block_label}")
                 matched = re.match(r"(\s*)-\s*\w+", line)
                 item_indent_level = len(matched.group(1)) if matched else None
                 if curr_item == 0:
@@ -1072,7 +1070,7 @@ def validate():
 
                 if result_type not in results:
                     results[result_type] = {}
-                response = handle_schema_error(err, code, result_type, s)
+                response = handle_schema_error(err, code, result_type)
                 results[result_type][title] = response
             logger.debug(f"Got schema validation results: {results}")
             for result_type in ["error", "warning", "info"]:
@@ -1105,7 +1103,7 @@ def validate():
             400,
         )
     except jsonschema.exceptions.ValidationError as err:
-        return handle_schema_error(err, code, "error", s)
+        return handle_schema_error(err, code, "error")
 
     return Response(status=200)
 
