@@ -43,7 +43,7 @@ PURL_SCHEMA = (
 # The location of the REGISTRY validations schema
 REGISTRY_SCHEMA = (
     f"https://github.com/{GITHUB_ORG}/{GITHUB_FOUNDRY_REPO}/raw/master/util/"
-    f"schema/registry_schema_test.json"
+    f"schema/registry_schema.json"
 )
 
 # The URL where information (e.g. long names) about ontologies can be retrieved.
