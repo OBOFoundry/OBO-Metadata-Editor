@@ -25,7 +25,7 @@ from flask import (
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlencode
 from urllib.request import urlopen
 
 # To run in development mode, do:
@@ -158,6 +158,9 @@ def github_call(method, endpoint, params={}):
 
     fargs = {"url": GITHUB_API_URL + endpoint, "headers": api_headers, "json": params}
     if method == "get":
+        # GET parameters must go in URL - https://developer.github.com/v3/#parameters
+        if len(params) > 0:
+            fargs['url'] = fargs['url']+"?"+urlencode(params)
         response = requests.get(**fargs)
     elif method == "post":
         response = requests.post(**fargs)
