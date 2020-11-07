@@ -370,15 +370,14 @@ def index():
     if not purl_configs:
         raise Exception("Could not get contents of the purl config directory")
 
-    if dev:
-        # Get all of the available registry config files to edit:
-        registry_configs = github_call(
-            "GET",
-            f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/'
-            f'contents/{editor_types["registry"]["dir"]}',
-        )
-        if not registry_configs:
-            raise Exception("Could not get contents of the registry config directory")
+    # Get all of the available registry config files to edit:
+    registry_configs = github_call(
+        "GET",
+        f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/'
+        f'contents/{editor_types["registry"]["dir"]}',
+    )
+    if not registry_configs:
+        raise Exception("Could not get contents of the registry config directory")
 
     # Add the title, url and description for each config to the records that will be rendered.
     # This information is found in the ontology metadata.
@@ -395,7 +394,7 @@ def index():
                 if o["id"] == config_id and "description" in o
             ]
             config_description = config_description.pop() if config_description else ""
-            if dev and registry_configs:
+            if registry_configs:
                 registries_for_idspace = [
                     x
                     for x in registry_configs
@@ -407,37 +406,37 @@ def index():
                     "id": config_id,
                     "purl_filename": purl_config["name"],
                     "registry_filename": registries_for_idspace[0]["name"]
-                    if dev and len(registries_for_idspace) > 0
+                    if len(registries_for_idspace) > 0
                     else None,
                     "title": config_title,
                     "description": config_description,
                 }
             )
-    if dev:
-        for registry_config in registry_configs:
-            config_id = (
-                registry_config["name"].casefold().replace(app.config["MARKDOWN_EXT"], "")
+
+    for registry_config in registry_configs:
+        config_id = (
+            registry_config["name"].casefold().replace(app.config["MARKDOWN_EXT"], "")
+        )
+        if config_id not in [c["id"] for c in configs]:
+            config_title = [o["title"] for o in ontology_md if o["id"] == config_id]
+            config_title = config_title.pop() if config_title else ""
+            config_description = [
+                o["description"]
+                for o in ontology_md
+                if o["id"] == config_id and "description" in o
+            ]
+            config_description = (
+                config_description.pop() if config_description else ""
             )
-            if config_id not in [c["id"] for c in configs]:
-                config_title = [o["title"] for o in ontology_md if o["id"] == config_id]
-                config_title = config_title.pop() if config_title else ""
-                config_description = [
-                    o["description"]
-                    for o in ontology_md
-                    if o["id"] == config_id and "description" in o
-                ]
-                config_description = (
-                    config_description.pop() if config_description else ""
-                )
-                configs.append(
-                    {
-                        "id": config_id,
-                        "purl_filename": None,
-                        "registry_filename": registry_config["name"],
-                        "title": config_title,
-                        "description": config_description,
-                    }
-                )
+            configs.append(
+                {
+                    "id": config_id,
+                    "purl_filename": None,
+                    "registry_filename": registry_config["name"],
+                    "title": config_title,
+                    "description": config_description,
+                }
+            )
 
     return render_template("index.jinja2", configs=configs, login=g.user.github_login)
 
@@ -522,7 +521,7 @@ def edit_new():
                 f"or alternatively enter the required GitHub information below.",
             )
 
-    if dev and editor_type is None:  # First step
+    if editor_type is None:  # First step
         try:
             github_call("GET", f"repos/{github_org}/{github_repo}")
         except requests.HTTPError:
@@ -579,7 +578,7 @@ def edit_new():
             issueNumber=issueNumber,
             login=g.user.github_login,
         )
-    elif not dev or editor_type == "purl":
+    elif editor_type == "purl":
         # Generate some text to populate the editor initially with,
         # based on the new project template,
         # and then inject it into the jinja2 template for the metadata editor:
@@ -615,7 +614,7 @@ def prepare_new():
     issues = {}
     issue_list = github_call(
         "GET",
-        f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/' f"issues",
+        f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/issues',
         params={"state": "open", "labels": "new ontology"},
     )
     for issue in issue_list:

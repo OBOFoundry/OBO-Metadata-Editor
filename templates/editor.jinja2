@@ -23,11 +23,11 @@
 {% block content %}
 
   <h4>
-    {% if dev and not existing and editor_type == 'registry'%} Step 2 of 3: {% endif %}
-    {% if dev and not existing and editor_type == 'purl'%} Step 3 of 3: {% endif %}
+    {% if not existing and editor_type == 'registry'%} Step 2 of 3: {% endif %}
+    {% if not existing and editor_type == 'purl'%} Step 3 of 3: {% endif %}
     {% if existing %} Editing {% else %} Adding {% endif %}
     {% set project_id = filename[ 0: filename.index(".") ] %}
-    {% if dev %} {{editor_type}} {% endif %}
+    {{editor_type}}
     project configuration for {{ project_id | upper }}
   </h4>
 
@@ -51,7 +51,7 @@
         Add configuration
       </button>
     {% endif %}
-    {% if dev and not existing %}
+    {% if not existing %}
       <button id="next-step-btn" class="btn btn-danger"
               onclick="" disabled>
           {% if editor_type == 'registry' %}
