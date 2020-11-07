@@ -719,7 +719,7 @@ def new_foundry():
     ]
     if idSpace.casefold() in registry_config_ids:
         resultType = "failure"
-        print(f"Non-unique ID requested: {idSpace}")
+        logger.error(f"Non-unique ID requested: {idSpace}")
         return render_template(
             "new_foundry_reg.jinja2",
             login=g.user.github_login,
@@ -778,11 +778,11 @@ def new_foundry():
     try:
         response = github_call("POST", url, issue)
         if response:
-            print(f"Successfully created issue {issueTitle}, response: {response}")
+            logger.debug(f"Successfully created issue {issueTitle}, response: {response}")
             resultType = "success"
         else:
             resultType = "failure"
-            print(f"Could not create issue {issueTitle}")
+            logger.error(f"Could not create issue {issueTitle}")
             return render_template(
                 "new_foundry_reg.jinja2",
                 login=g.user.github_login,

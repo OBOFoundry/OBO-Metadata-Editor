@@ -32,7 +32,7 @@ MARKDOWN_EXT = ".md"
 
 # The location to post New Ontology Registration issues to:
 REGISTRY_REQUEST = (
-    f"https://api.github.com/repos/{GITHUB_ORG}/{GITHUB_FOUNDRY_REPO}/issues"
+    f"repos/{GITHUB_ORG}/{GITHUB_FOUNDRY_REPO}/issues"
 )
 
 # The location of the PURL validation schema:
