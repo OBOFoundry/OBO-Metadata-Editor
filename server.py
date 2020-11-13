@@ -7,7 +7,9 @@ import jsonschema
 import logging
 import re
 import requests
-import yaml
+from ruamel.yaml import YAML
+from ruamel.yaml.error import YAMLError
+from ruamel.yaml.constructor import DuplicateKeyError
 
 from datetime import datetime
 from flask import (
@@ -27,6 +29,8 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from urllib.parse import parse_qs, urlencode
 from urllib.request import urlopen
+
+yaml = YAML()  # For parsing yaml files
 
 # To run in development mode, do:
 # export FLASK_APP=server.py
@@ -81,7 +85,7 @@ editor_types = {
 try:
     ontology_md = urlopen(app.config["ONTOLOGY_METADATA_URL"])
     if ontology_md.getcode() == 200:
-        ontology_md = yaml.load(ontology_md.read(), Loader=yaml.SafeLoader)["ontologies"]
+        ontology_md = yaml.load(ontology_md.read())["ontologies"]
 except Exception as e:
     logger.error(f"Could not retrieve ontology metadata: {e}")
     ontology_md = {}
@@ -160,7 +164,7 @@ def github_call(method, endpoint, params={}):
     if method == "get":
         # GET parameters must go in URL - https://developer.github.com/v3/#parameters
         if len(params) > 0:
-            fargs['url'] = fargs['url']+"?"+urlencode(params)
+            fargs["url"] = fargs["url"] + "?" + urlencode(params)
         response = requests.get(**fargs)
     elif method == "post":
         response = requests.post(**fargs)
@@ -428,9 +432,7 @@ def index():
                 for o in ontology_md
                 if o["id"] == config_id and "description" in o
             ]
-            config_description = (
-                config_description.pop() if config_description else ""
-            )
+            config_description = config_description.pop() if config_description else ""
             configs.append(
                 {
                     "id": config_id,
@@ -494,7 +496,7 @@ def edit_new():
         )["body"]
         logger.debug(f"Got issue body {issueData}")
         try:
-            issueDetails = yaml.load(issueData, Loader=yaml.SafeLoader)
+            issueDetails = yaml.load(issueData)
             # Remove keys not needed for the registry metadata
             del issueDetails["related_ontologies"]
             del issueDetails["intended_use"]
@@ -508,7 +510,7 @@ def edit_new():
                 github_org = githuburl.group(1)
                 github_repo = githuburl.group(2)
                 logger.debug(f"Got github details: {github_org}, {github_repo}")
-        except (yaml.YAMLError, TypeError) as err:
+        except (YAMLError, TypeError) as err:
             error_message = format(err)
             return render_template(
                 "prepare_new_config.jinja2",
@@ -894,123 +896,27 @@ def validate():
     output of the error.
     """
 
-    def handle_schema_error(err, code, result_type):
-        """
-        Given a schema validation error in a block of code, create a JSON message with line
-        number
-        :param err: The schema validation error
-        :param code: The block of code in which the schema validation failed
-        :param result_type: Levels: e.g. 'error', 'warning', 'info'
-        :return: A JSON response object
-        """
-        if result_type == "error":
-            status = 400
-        else:
-            status = 200
-        logger.debug(f"Determining line number for error: {list(err.absolute_path)}")
-        start = 0
-        error_summary = err.message
-        if not err.absolute_schema_path:
-            start = -1
-        else:
-            err_descr = err.schema.get("description")  # error schema description
-            if err_descr:
-                error_summary = f"{err.message} ({err_descr})"
-            for component in err.absolute_path:
-                if type(component) is str:
-                    block_label = component
-                    start = get_error_start(code, start, block_label) + 1
-                    logger.debug(f"Error begins at line {start}")
-                elif type(component) is int:
-                    start = get_error_start(code, start, block_label, component) + 1
-                    logger.debug(f"Error begins at line {start}")
-
-        return (
-            jsonify(
-                {
-                    "result_type": result_type,
-                    "summary": format(error_summary),
-                    "line_number": start,
-                    "details": format(err),
-                }
-            ),
-            status,
-        )
-
-    def get_error_start(code, start, block_label, item=-1):
-        """
-        Given some YAML code and a line to begin searching from within it, then if no item is
-        specified this function returns the line number of the given block_label (a YAML directive
-        of the form '(- )label:') is returned. If an item number n is specified, then the line
-        number corresponding to the nth item within the block is returned instead (where items
-        within a block in the form:
-        - item 1
-        - item 2
-        - etc.)
-        """
-        block_no = f" item #{item + 1} of " if item >= 0 else " "
-        logger.debug(f"Searching from line {start+1} for{block_no}block: '{block_label}'")
-        # Split the long code string into individual lines, and discard everything before `start`:
-        codelines = code.splitlines()[start:]
-        # Lines containing block labels will always be of this form:
-        pattern = r"^\s*-?\s*{}\s*:.*$".format(block_label)
-        # When counting items, we consider only those indented by the same amount,
-        # and use indent_level to keep track of the current indentation level:
-        indent_level = None
-        curr_item = 0
-        for i, line in enumerate(codelines):
-            # Check to see whether the current line contains the block label we are looking for:
-            matched = re.fullmatch(pattern, line)
-            if matched:
-                start = start + i
-                logger.debug(f"Found the start of the block: '{line}' at line {start+1}")
-                # If we've not been instructed to search for an item within the block, we're done:
-                if item < 0:
-                    return start
-            elif item >= 0:
-                # If the current line does not contain the block label, then if we have found it
-                # previously, and if we are to search for the nth item within the block, then
-                # do that. If this is the first item, then take note of the indentation level.
-                logger.debug(f"Searching for item {item} in block {block_label}")
-                matched = re.match(r"(\s*)-\s*\w+", line)
-                item_indent_level = len(matched.group(1)) if matched else None
-                if curr_item == 0:
-                    indent_level = item_indent_level
-
-                # Only consider items that fall directly under this block:
-                if item_indent_level == indent_level:
-                    logger.debug(
-                        f"Found item #{curr_item + 1} of block: '{block_label}' at "
-                        f"line {start + i + 1}. Line is: '{line}'"
-                    )
-                    # If we have found the nth item, return the line on which it starts:
-                    if curr_item == item:
-                        return start + i
-                    # Otherwise continue looping:
-                    curr_item += 1
-
-        logger.debug("*** Something went wrong while trying to find the line number ***")
-        return start
-
-    # special yaml loader with duplicate key verification
-    class UniqueKeyLoader(yaml.SafeLoader):
-        def construct_mapping(self, node, deep=False):
-            mapping = []
-            for key_node, value_node in node.value:
-                key = self.construct_object(key_node, deep=deep)
-                if key in mapping:
-                    logger.debug(
-                        f"The key {key} is duplicated, node {key_node},"
-                        f" line {key_node.start_mark.line+1}."
-                    )
-                    raise yaml.MarkedYAMLError(
-                        None,
-                        None,
-                        f"The key {key} is duplicated, line {key_node.start_mark.line+1}.",
-                        key_node.start_mark,
-                    )
-                mapping.append(key)
-            return super().construct_mapping(node, deep)
+    def find_schema_error_line(err, yaml_source):
+        keys = list(err.path)
+        line_number = -1
+        logger.debug(keys)
+        if err.validator == "additionalProperties":
+            logger.debug("Got additional properties error")
+            m = err.message
+            key = m[
+                m.index("'") + 1 : m.rindex("'")
+            ]  # get the added key name; this is hacky
+            keys.append(key)
+        if len(keys) > 0:
+            subset = yaml_source
+            while len(keys) > 1:
+                subset = subset[
+                    keys.pop(0)
+                ]  # follow the path, stopping with one key left
+            pos = subset.lc.data[keys[0]]  # get ruamel.yaml's line-column information
+            logger.debug(f"at line {pos[0] + 1}, column {pos[1] + 1}")
+            line_number = pos[0] + 1
+        return line_number
 
     if request.form.get("code") is None:
         return Response("Malformed POST request", status=400)
@@ -1020,7 +926,7 @@ def validate():
         editor_type = request.form["editor_type"]
         if editor_type == "purl":
             s = purl_schema
-            yaml_source = yaml.load(code, Loader=UniqueKeyLoader)
+            yaml_source = yaml.load(code)
             jsonschema.validate(yaml_source, purl_schema)
         elif editor_type == "registry":
             results = {}
@@ -1034,7 +940,7 @@ def validate():
                     status=400,
                 )
             yaml_code = code_sections[1]
-            yaml_source = yaml.load(yaml_code, Loader=UniqueKeyLoader)
+            yaml_source = yaml.load(yaml_code)
             s = registry_schema
             try:
                 jsonschema.validate(yaml_source, s)
@@ -1072,7 +978,30 @@ def validate():
 
                 if result_type not in results:
                     results[result_type] = {}
-                response = handle_schema_error(err, code, result_type)
+
+                logger.debug(err.message)
+                line_number = find_schema_error_line(err, yaml_source)
+
+                if result_type == "error":
+                    status = 400
+                else:
+                    status = 200
+                error_summary = err.message
+                if err.absolute_schema_path:
+                    err_descr = err.schema.get("description")
+                    if err_descr:
+                        error_summary = f"{err.message} ({err_descr})"
+                response = (
+                    jsonify(
+                        {
+                            "result_type": result_type,
+                            "summary": format(error_summary),
+                            "line_number": line_number,
+                            "details": format(err),
+                        }
+                    ),
+                    status,
+                )
                 results[result_type][title] = response
             logger.debug(f"Got schema validation results: {results}")
             for result_type in ["error", "warning", "info"]:
@@ -1085,7 +1014,7 @@ def validate():
         else:
             return Response(f"Unknown editor type: {editor_type}", status=400)
 
-    except (yaml.YAMLError, TypeError) as err:
+    except (DuplicateKeyError, YAMLError, TypeError) as err:
         line_number = -1
         if hasattr(err, "problem_mark"):
             mark = err.problem_mark
@@ -1105,7 +1034,26 @@ def validate():
             400,
         )
     except jsonschema.exceptions.ValidationError as err:
-        return handle_schema_error(err, code, "error")
+        result_type = "error"
+        logger.debug(err.message)
+        line_number = find_schema_error_line(err, yaml_source)
+        status = 400
+        error_summary = err.message
+        if err.absolute_schema_path:
+            err_descr = err.schema.get("description")
+            if err_descr:
+                error_summary = f"{err.message} ({err_descr})"
+        return (
+            jsonify(
+                {
+                    "result_type": result_type,
+                    "summary": format(error_summary),
+                    "line_number": line_number,
+                    "details": format(err),
+                }
+            ),
+            status,
+        )
 
     return Response(status=200)
 
