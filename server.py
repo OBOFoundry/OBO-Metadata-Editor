@@ -752,7 +752,7 @@ def new_foundry():
         )
     # get license URL
     if ontoLicense == "CC-0":
-        licenseURL = "https://creativecommons.org/share-your-work/public-domain/cc0/"
+        licenseURL = "https://creativecommons.org/publicdomain/zero/1.0/"
     elif ontoLicense == "CC-BY":
         licenseURL = "https://creativecommons.org/licenses/by/4.0/"
     else:
@@ -765,7 +765,7 @@ def new_foundry():
     issueDict["contact"] = {
         "label": contactPerson,
         "email": contactEmail,
-        "github_username": contactGitHub,
+        "github": contactGitHub,
     }
     issueDict["license"] = {"url": licenseURL, "label": ontoLicense}
     issueDict["description"] = description
