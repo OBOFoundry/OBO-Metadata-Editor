@@ -7,6 +7,8 @@ import jsonschema
 import logging
 import re
 import requests
+
+from io import StringIO
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 from ruamel.yaml.constructor import DuplicateKeyError
@@ -558,15 +560,17 @@ def edit_new():
             issueDetails["domain"] = ""
 
         # Generate text for initial registry config
-        registryYamlText = yaml.dump(
+        stringio = StringIO()
+        yaml.dump(
             {
                 "layout": "ontology_detail",
                 **issueDetails,
                 "products": [{"id": f"{project_id.lower()}.owl"}],
                 "activity_status": "active",
             },
-            sort_keys=False,
+            stringio
         )
+        registryYamlText = stringio.getvalue()
         registryYamlText = app.config["NEW_PROJECT_REGISTRY_TEMPLATE"].format(
             idspace_lower=project_id.lower(),
             yaml_registry_details=registryYamlText,
@@ -771,7 +775,9 @@ def new_foundry():
     issueDict["data_source"] = dataSource
     issueDict["remarks"] = remarks
 
-    issueBody = yaml.dump(issueDict, sort_keys=False)
+    stringio = StringIO()
+    yaml.dump(issueDict, stringio)
+    issueBody = stringio.getvalue()
     issueTitle = f"New Ontology Request: {ontologyTitle}"
 
     url = app.config["REGISTRY_REQUEST"]
