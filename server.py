@@ -553,7 +553,7 @@ def edit_new():
             issueDetails["contact"] = {
                 "label": "",
                 "email": "",
-                "github_username": g.user.github_login,
+                "github": g.user.github_login,
             }
             issueDetails["license"] = {"url": "", "label": ""}
             issueDetails["description"] = ""
