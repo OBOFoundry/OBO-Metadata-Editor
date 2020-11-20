@@ -181,6 +181,51 @@ if (document.getElementById("code")) {
     editor.scrollIntoView(what={line: editor.getCursor().line, ch: 0}, margin=12);
   });
 
+
+  /**
+   * Activate context-sensitive help on any navigation
+   */
+  editor.on("cursorActivity", function (cm, event) {
+    contextSensitiveHelp(editor);
+  });
+}
+
+/**
+ *  Display context-sensitive help while navigating the editor
+ */
+var contextSensitiveHelp = function(editor) {
+  var cursor = editor.getCursor();
+  var getContext = function() {
+    /* Finds the nearest root-level directive above the current line (if one exists) and returns its
+       name. */
+    var lineNum = cursor.line;
+    var matches = /^(\w+):/.exec(editor.getLine(lineNum));
+    while (!matches && lineNum > 0) {
+      matches = /^(\w+):/.exec(editor.getLine(--lineNum));
+    }
+    return matches && matches[1];
+  };
+
+  var context = getContext();
+
+  //Get the edit JSON schema
+  var keyList = Object.keys(editing_schema['properties']);
+  var keyListLength = keyList.length;
+
+  //Context-sensitive help based on schema
+  for (var i = 0; i < keyListLength; i++) {
+    var keyValue = keyList[i];
+    if (context === keyValue) {
+      $("#help-area").show();
+      if (editing_schema['properties'][keyValue]['description'] !== undefined) {
+        $("#help-area").html(keyValue + ": "+ editing_schema['properties'][keyValue]['description']);
+      } else {
+        $("#help-area").html(keyValue);
+      }
+    }
+  }
+
+
 }
 
 /**
@@ -249,19 +294,6 @@ var purlYamlHint = function(editor, options) {
   //Get the edit JSON schema
   var keyList = Object.keys(editing_schema['properties']);
   var keyListLength = keyList.length;
-
-  //Context-sensitive help based on schema
-  for (var i = 0; i < keyListLength; i++) {
-    var keyValue = keyList[i];
-    if (context === keyValue) {
-      $("#help-area").show();
-      if (editing_schema['properties'][keyValue]['description'] !== undefined) {
-        $("#help-area").html(keyValue + ": "+ editing_schema['properties'][keyValue]['description']);
-      } else {
-        $("#help-area").html(keyValue);
-      }
-    }
-  }
 
   //Autocomplete suggestions (code completion) based on schema
   var listItems = []; //Start with an empty array
