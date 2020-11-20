@@ -513,20 +513,90 @@ def edit_new():
                 github_repo = githuburl.group(2)
                 logger.debug(f"Got github details: {github_org}, {github_repo}")
         except (YAMLError, TypeError) as err:
-            error_message = format(err)
-            return render_template(
-                "prepare_new_config.jinja2",
-                login=g.user.github_login,
-                project_id=project_id,
-                github_org=github_org,
-                github_repo=github_repo,
-                error_message=f"Not able to parse YAML metadata in the issue {issueNumber}, "
-                f"due to: <i>{error_message}</i>. Please "
-                f"<a href='http://github.com/{app.config['GITHUB_ORG']}/"
-                f"{editor_types['registry']['repo']}/issues/{issueNumber}' "
-                f"target = '_new'>visit the issue</a> to correct the YAML metadata, "
-                f"or alternatively enter the required GitHub information below.",
-            )
+            # Try to parse it from the GitHub issue template format
+            if "## Ontology title" in issueData:
+                issueDetails = {}
+                issueDetails["description"] = ""
+                fields = [f.strip() for f in issueData.split("##")]
+                for fieldString in fields:
+                    if fieldString.startswith("Ontology title"):
+                        issueDetails["title"] = fieldString.replace(
+                            "Ontology title", ""
+                        ).strip()
+                    elif fieldString.startswith("Requested ID space"):
+                        project_id = fieldString.replace("Requested ID space", "").strip()
+                        issueDetails["id"] = project_id
+                    elif fieldString.startswith("Ontology location"):
+                        issueDetails["homepage"] = fieldString.replace(
+                            "Ontology location", ""
+                        ).strip()
+                        logger.debug(
+                            f"Looking for github details in {issueDetails['homepage']}"
+                        )
+                        githuburl = re.match(
+                            r"https?://github\.com/(.*?)/(.*)", issueDetails["homepage"]
+                        )
+                        logger.debug(f"Match object {githuburl}")
+                        github_org = githuburl.group(1)
+                        github_repo = githuburl.group(2)
+                        logger.debug(
+                            f"Got github details: '{github_org}', '{github_repo}'"
+                        )
+                    elif fieldString.startswith("Contact person"):
+                        lines = fieldString.replace("Contact person", "").split("\n")
+                        for line in lines:
+                            if line.strip().startswith("Name:"):
+                                name = line.replace("Name:", "").strip()
+                            elif line.strip().startswith("Email address:"):
+                                email = line.replace("Email address:", "").strip()
+                            elif line.strip().startswith("GitHub username:"):
+                                github = line.replace("GitHub username:", "").strip()
+                        contact = {"label": name, "email": email, "github": github}
+                        issueDetails["contact"] = contact
+                    elif fieldString.startswith("Issue tracker"):
+                        issueDetails["tracker"] = fieldString.replace(
+                            "Issue tracker", ""
+                        ).strip()
+                    elif fieldString.startswith(
+                        "What domain is the ontology intended to cover"
+                    ):
+                        issueDetails["domain"] = fieldString.replace(
+                            "What domain is the " "ontology intended to cover", ""
+                        ).strip()
+                    elif fieldString.startswith("Ontology license"):
+                        if "[x] CC0" in fieldString:
+                            url = "https://creativecommons.org/share-your-work/public-domain/cc0/"
+                            label = "CC-0"
+                        elif "[x] CC-BY" in fieldString:
+                            url = "https://creativecommons.org/share-your-work/public-domain/cc0/"
+                            label = "CC-0"
+                        elif "[x] Other" in fieldString:
+                            url = None
+                            label = fieldString.substring(
+                                fieldString.index("[x] Other") + 10
+                            ).strip()
+                        licenseInfo = {"url": url, "label": label}
+                        issueDetails["license"] = licenseInfo
+
+                logger.debug(
+                    f"Got issue details from parsed issue template: {issueDetails}"
+                )
+
+            else:  # Can't parse this issue, something has gone wrong.
+                error_message = format(err)
+                return render_template(
+                    "prepare_new_config.jinja2",
+                    login=g.user.github_login,
+                    project_id=project_id,
+                    github_org=github_org,
+                    github_repo=github_repo,
+                    error_message=f"Not able to parse YAML metadata in the issue {issueNumber}, "
+                    f"due to: <i>{error_message}</i>. Please "
+                    f"<a href='http://github.com/{app.config['GITHUB_ORG']}/"
+                    f"{editor_types['registry']['repo']}/issues/{issueNumber}' "
+                    f"target = '_new'>visit the issue</a> to correct the YAML metadata, "
+                    f"or alternatively enter the required GitHub information below.",
+                )
 
     if editor_type is None:  # First step
         try:
@@ -538,7 +608,8 @@ def edit_new():
                 project_id=project_id,
                 github_org=github_org,
                 github_repo=github_repo,
-                error_message=f"The GitHub repository at {github_org}/{github_repo} does not exist",
+                error_message=f"Unable to create initial ontology metadata, as "
+                f"the GitHub repository at {github_org}/{github_repo} does not exist.",
             )
         # If issueDetails have not been loaded, populate an empty template
         if issueDetails is None:
@@ -568,7 +639,7 @@ def edit_new():
                 "products": [{"id": f"{project_id.lower()}.owl"}],
                 "activity_status": "active",
             },
-            stringio
+            stringio,
         )
         registryYamlText = stringio.getvalue()
         registryYamlText = app.config["NEW_PROJECT_REGISTRY_TEMPLATE"].format(
