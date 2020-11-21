@@ -571,9 +571,9 @@ def edit_new():
                             label = "CC-BY 4.0"
                         elif "[x] Other" in fieldString:
                             url = None
-                            label = fieldString.substring(
-                                fieldString.index("[x] Other") + 10
-                            ).strip()
+                            label = fieldString[
+                                fieldString.index("[x] Other") + 10 : len(fieldString)
+                            ].strip()
                         licenseInfo = {"url": url, "label": label}
                         issueDetails["license"] = licenseInfo
 
@@ -1005,6 +1005,7 @@ def validate():
 
     def find_schema_error_line(err, yaml_source):
         keys = list(err.path)
+        logger.debug(f"Trying to determine line number for path {keys}")
         line_number = -1
         logger.debug(keys)
         if err.validator == "additionalProperties":
@@ -1020,9 +1021,14 @@ def validate():
                 subset = subset[
                     keys.pop(0)
                 ]  # follow the path, stopping with one key left
-            pos = subset.lc.data[keys[0]]  # get ruamel.yaml's line-column information
-            logger.debug(f"at line {pos[0] + 1}, column {pos[1] + 1}")
-            line_number = pos[0] + 1
+            if keys[0] in subset.lc.data:
+                pos = subset.lc.data[keys[0]]  # get ruamel.yaml's line-column information
+                logger.debug(f"at line {pos[0] + 1}, column {pos[1] + 1}")
+                line_number = pos[0] + 1
+            else:
+                logger.debug(
+                    f"Unable to determine line number for key {keys[0]} in subset {subset}"
+                )
         return line_number
 
     if request.form.get("code") is None:
