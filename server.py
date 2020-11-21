@@ -485,7 +485,7 @@ def edit_new():
         return Response("Malformed POST request", status=400)
 
     logger.debug(f"Got editor type: {editor_type}")
-
+    gHubRegex = r"https?://github\.com/([^/]*)/([^/]*)/?"
     issueDetails = None
     if issueNumber:
         # Retrieve all the information from the issue
@@ -507,7 +507,7 @@ def edit_new():
 
             ontologyLocation = issueDetails["homepage"]
             project_id = issueDetails["id"]
-            githuburl = re.match(r"https?://github\.com/(.*)/(.*)", ontologyLocation)
+            githuburl = re.match(gHubRegex, ontologyLocation)
             if githuburl and github_org is None and github_repo is None:
                 github_org = githuburl.group(1)
                 github_repo = githuburl.group(2)
@@ -533,15 +533,14 @@ def edit_new():
                         logger.debug(
                             f"Looking for github details in {issueDetails['homepage']}"
                         )
-                        githuburl = re.match(
-                            r"https?://github\.com/(.*?)/(.*)", issueDetails["homepage"]
-                        )
-                        logger.debug(f"Match object {githuburl}")
-                        github_org = githuburl.group(1)
-                        github_repo = githuburl.group(2)
-                        logger.debug(
-                            f"Got github details: '{github_org}', '{github_repo}'"
-                        )
+                        githuburl = re.match(gHubRegex, issueDetails["homepage"])
+                        if githuburl:
+                            logger.debug(f"Match object {githuburl}")
+                            github_org = githuburl.group(1)
+                            github_repo = githuburl.group(2)
+                            logger.debug(
+                                f"Got github details: '{github_org}', '{github_repo}'"
+                            )
                     elif fieldString.startswith("Contact person"):
                         lines = fieldString.replace("Contact person", "").split("\n")
                         for line in lines:
@@ -582,7 +581,18 @@ def edit_new():
                     f"Got issue details from parsed issue template: {issueDetails}"
                 )
 
-            else:  # Can't parse this issue, something has gone wrong.
+            else:  # Can't parse this issue with any strategy, something has gone wrong.
+                issues = {}
+                issue_list = github_call(
+                    "GET",
+                    f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/issues',
+                    params={"state": "open", "labels": "new ontology"},
+                )
+                for issue in issue_list:
+                    number = issue["number"]
+                    title = issue["title"]
+                    logger.debug(f"Got issue: {number}, {title}")
+                    issues[number] = title
                 error_message = format(err)
                 return render_template(
                     "prepare_new_config.jinja2",
@@ -590,18 +600,32 @@ def edit_new():
                     project_id=project_id,
                     github_org=github_org,
                     github_repo=github_repo,
-                    error_message=f"Not able to parse YAML metadata in the issue {issueNumber}, "
+                    error_message=f"Not able to parse metadata in the issue {issueNumber}, "
                     f"due to: <i>{error_message}</i>. Please "
                     f"<a href='http://github.com/{app.config['GITHUB_ORG']}/"
                     f"{editor_types['registry']['repo']}/issues/{issueNumber}' "
                     f"target = '_new'>visit the issue</a> to correct the YAML metadata, "
                     f"or alternatively enter the required GitHub information below.",
+                    issueList=issues,
                 )
 
     if editor_type is None:  # First step
         try:
             github_call("GET", f"repos/{github_org}/{github_repo}")
         except requests.HTTPError:
+            # Get the issuse list again
+            issues = {}
+            issue_list = github_call(
+                "GET",
+                f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/issues',
+                params={"state": "open", "labels": "new ontology"},
+            )
+            for issue in issue_list:
+                number = issue["number"]
+                title = issue["title"]
+                logger.debug(f"Got issue: {number}, {title}")
+                issues[number] = title
+
             return render_template(
                 "prepare_new_config.jinja2",
                 login=g.user.github_login,
@@ -609,7 +633,9 @@ def edit_new():
                 github_org=github_org,
                 github_repo=github_repo,
                 error_message=f"Unable to create initial ontology metadata, as "
-                f"the GitHub repository at {github_org}/{github_repo} does not exist.",
+                f"the GitHub repository at {github_org}/{github_repo} does not exist. "
+                f" Please enter the GitHub details for your project.",
+                issueList=issues,
             )
         # If issueDetails have not been loaded, populate an empty template
         if issueDetails is None:
@@ -657,7 +683,7 @@ def edit_new():
             yaml=registryYamlText,
             issueNumber=issueNumber,
             login=g.user.github_login,
-            schema_file=json.dumps(registry_schema)
+            schema_file=json.dumps(registry_schema),
         )
     elif editor_type == "purl":
         # Generate some text to populate the editor initially with,
@@ -678,7 +704,7 @@ def edit_new():
             yaml=purlYamlText,
             addIssueLink=addIssueLink,
             login=g.user.github_login,
-            schema_file=json.dumps(purl_schema)
+            schema_file=json.dumps(purl_schema),
         )
     else:
         return Response("Malformed POST request, unknown editor type", status=400)
