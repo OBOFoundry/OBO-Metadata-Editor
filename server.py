@@ -557,10 +557,10 @@ def edit_new():
                             "Issue tracker", ""
                         ).strip()
                     elif fieldString.startswith(
-                        "What domain is the ontology intended to cover"
+                        "What domain is the ontology intended to cover?"
                     ):
                         issueDetails["domain"] = fieldString.replace(
-                            "What domain is the " "ontology intended to cover", ""
+                            "What domain is the ontology intended to cover?", ""
                         ).strip()
                     elif fieldString.startswith("Ontology license"):
                         if "[x] CC0" in fieldString:
