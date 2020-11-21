@@ -564,11 +564,11 @@ def edit_new():
                         ).strip()
                     elif fieldString.startswith("Ontology license"):
                         if "[x] CC0" in fieldString:
-                            url = "https://creativecommons.org/share-your-work/public-domain/cc0/"
+                            url = "http://creativecommons.org/publicdomain/zero/1.0/"
                             label = "CC-0"
                         elif "[x] CC-BY" in fieldString:
-                            url = "https://creativecommons.org/share-your-work/public-domain/cc0/"
-                            label = "CC-0"
+                            url = "http://creativecommons.org/licenses/by/4.0/"
+                            label = "CC-BY 4.0"
                         elif "[x] Other" in fieldString:
                             url = None
                             label = fieldString.substring(
