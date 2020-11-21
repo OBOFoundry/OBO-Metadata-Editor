@@ -1003,11 +1003,9 @@ def validate():
     output of the error.
     """
 
-    def find_schema_error_line(err, yaml_source):
-        keys = list(err.path)
+    def find_schema_error_line(keys, yaml_source):
         logger.debug(f"Trying to determine line number for path {keys}")
         line_number = -1
-        logger.debug(keys)
         if err.validator == "additionalProperties":
             logger.debug("Got additional properties error")
             m = err.message
@@ -1023,12 +1021,8 @@ def validate():
                 ]  # follow the path, stopping with one key left
             if keys[0] in subset.lc.data:
                 pos = subset.lc.data[keys[0]]  # get ruamel.yaml's line-column information
-                logger.debug(f"at line {pos[0] + 1}, column {pos[1] + 1}")
                 line_number = pos[0] + 1
-            else:
-                logger.debug(
-                    f"Unable to determine line number for key {keys[0]} in subset {subset}"
-                )
+                logger.debug(f"at line {pos[0] + 1}, column {pos[1] + 1}")
         return line_number
 
     if request.form.get("code") is None:
@@ -1093,7 +1087,7 @@ def validate():
                     results[result_type] = {}
 
                 logger.debug(err.message)
-                line_number = find_schema_error_line(err, yaml_source)
+                line_number = find_schema_error_line(list(err.absolute_path), yaml_source)
 
                 if result_type == "error":
                     status = 400
@@ -1149,7 +1143,7 @@ def validate():
     except jsonschema.exceptions.ValidationError as err:
         result_type = "error"
         logger.debug(err.message)
-        line_number = find_schema_error_line(err, yaml_source)
+        line_number = find_schema_error_line(list(err.absolute_path), yaml_source)
         status = 400
         error_summary = err.message
         if err.absolute_schema_path:
