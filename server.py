@@ -607,6 +607,7 @@ def edit_new():
                     f"target = '_new'>visit the issue</a> to correct the YAML metadata, "
                     f"or alternatively enter the required GitHub information below.",
                     issueList=issues,
+                    issueNumber=issueNumber,
                 )
 
     if editor_type is None:  # First step
@@ -636,6 +637,7 @@ def edit_new():
                 f"the GitHub repository at {github_org}/{github_repo} does not exist. "
                 f" Please enter the GitHub details for your project.",
                 issueList=issues,
+                issueNumber=issueNumber,
             )
         # If issueDetails have not been loaded, populate an empty template
         if issueDetails is None:

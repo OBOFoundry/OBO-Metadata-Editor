@@ -62,6 +62,10 @@
                  {% endif %}
                  required>
         </div>
+        {% if issueNumber is defined %}
+          <input type="hidden" name="issueNumber" id="issueNumber"
+                 value="{{ issueNumber }}" >
+        {% endif %}
         <button type="submit" class="btn btn-primary mb-2">Submit</button>
       </form>
   </div>
