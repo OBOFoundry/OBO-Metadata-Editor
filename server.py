@@ -657,6 +657,7 @@ def edit_new():
             yaml=registryYamlText,
             issueNumber=issueNumber,
             login=g.user.github_login,
+            schema_file=json.dumps(registry_schema)
         )
     elif editor_type == "purl":
         # Generate some text to populate the editor initially with,
@@ -677,6 +678,7 @@ def edit_new():
             yaml=purlYamlText,
             addIssueLink=addIssueLink,
             login=g.user.github_login,
+            schema_file=json.dumps(purl_schema)
         )
     else:
         return Response("Malformed POST request, unknown editor type", status=400)
