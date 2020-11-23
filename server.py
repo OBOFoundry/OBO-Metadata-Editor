@@ -529,7 +529,7 @@ def edit_new():
                     elif fieldString.startswith("Ontology location"):
                         issueDetails["homepage"] = fieldString.replace(
                             "Ontology location", ""
-                        ).strip()
+                        ).strip().split()[0]
                         logger.debug(
                             f"Looking for github details in {issueDetails['homepage']}"
                         )
@@ -563,17 +563,21 @@ def edit_new():
                             "What domain is the ontology intended to cover?", ""
                         ).strip()
                     elif fieldString.startswith("Ontology license"):
-                        if "[x] CC0" in fieldString:
+                        trimmed = fieldString.replace("[ ] CC0", "")
+                        trimmed = trimmed.replace("[ ] CC-BY", "")
+                        trimmed = trimmed.replace("[ ] Other", "")
+                        trimmed = trimmed.replace("[X]", "")
+                        trimmed = trimmed.replace("[x]", "")
+                        url = None
+                        label = None
+                        if "CC0" in trimmed:
                             url = "http://creativecommons.org/publicdomain/zero/1.0/"
                             label = "CC-0"
-                        elif "[x] CC-BY" in fieldString:
+                        elif "CC-BY" in trimmed:
                             url = "http://creativecommons.org/licenses/by/4.0/"
                             label = "CC-BY 4.0"
-                        elif "[x] Other" in fieldString:
-                            url = None
-                            label = fieldString[
-                                fieldString.index("[x] Other") + 10 : len(fieldString)
-                            ].strip()
+                        elif trimmed.strip():
+                            label = trimmed.strip()
                         licenseInfo = {"url": url, "label": label}
                         issueDetails["license"] = licenseInfo
 
