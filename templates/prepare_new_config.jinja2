@@ -2,17 +2,16 @@
 
 {% block content %}
 
-  <h4>{%if dev%} Step 1 of 3: {% endif %} Add a new project configuration</h4>
+  <h4>Step 1 of 3: Add a new project configuration</h4>
 
   <div class="row">&nbsp;</div>
 
   {% if error_message is defined %}
-    <div class="col-sm-12 alert alert-error" role="alert">
+    <div class="col-sm-12 alert alert-danger" role="alert">
       {{ error_message }}
     </div>
   {% endif %}
 
-  {% if dev %}
   <div class="col-sm-12 bg-light border">
     <div class="row mb-2">&nbsp;Do you already have an issue number
       for a Foundry ontology registration request?</div>
@@ -33,12 +32,10 @@
       </form>
   </div>
 
-  {% endif %}
-
   <div class="row">&nbsp;</div>
 
   <div class="col-sm-12 bg-light border">
-    <div class="row mb-2"> {% if dev %} Alternatively, please {% else %} Please {% endif %}
+    <div class="row mb-2"> Alternatively, please
       provide the following information for the new configuration.</div>
       <form action="/edit_new" method="POST">
         <div class="form-group">
@@ -65,6 +62,10 @@
                  {% endif %}
                  required>
         </div>
+        {% if issueNumber is defined %}
+          <input type="hidden" name="issueNumber" id="issueNumber"
+                 value="{{ issueNumber }}" >
+        {% endif %}
         <button type="submit" class="btn btn-primary mb-2">Submit</button>
       </form>
   </div>

@@ -32,7 +32,7 @@ MARKDOWN_EXT = ".md"
 
 # The location to post New Ontology Registration issues to:
 REGISTRY_REQUEST = (
-    f"https://api.github.com/repos/{GITHUB_ORG}/{GITHUB_FOUNDRY_REPO}/issues"
+    f"repos/{GITHUB_ORG}/{GITHUB_FOUNDRY_REPO}/issues"
 )
 
 # The location of the PURL validation schema:
@@ -40,12 +40,11 @@ PURL_SCHEMA = (
     f"https://github.com/{GITHUB_ORG}/{GITHUB_PURL_REPO}/raw/"
     f"master/tools/config.schema.json"
 )
-# The location of the REGISTRY validations schemas (a directory)
-REGISTRY_SCHEMA_DIR = (
-    f"https://github.com/{GITHUB_ORG}/{GITHUB_FOUNDRY_REPO}/raw/master/util/schema/"
+# The location of the REGISTRY validations schema
+REGISTRY_SCHEMA = (
+    f"https://github.com/{GITHUB_ORG}/{GITHUB_FOUNDRY_REPO}/raw/master/util/"
+    f"schema/registry_schema.json"
 )
-# REGISTRY validation schema file (now merged)
-REGISTRY_SCHEMA_FILES = ["registry_schema.json"]
 
 # The URL where information (e.g. long names) about ontologies can be retrieved.
 ONTOLOGY_METADATA_URL = (

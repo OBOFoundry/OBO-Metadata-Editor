@@ -11,6 +11,21 @@ var get_commit_btn = function() {
   }
 }
 
+
+/**
+ * Enables and disables the "submit as draft" feature if validations fail
+ */
+let draft = false;
+var set_draft = function(draft_val) {
+    draft = draft_val;
+    var btn_label = get_commit_btn().innerHTML.replace('as draft','');
+    if (draft_val) {
+        get_commit_btn().innerHTML = btn_label+ " as draft";
+    } else {
+        get_commit_btn().innerHTML = btn_label;
+    }
+}
+
 /**
  * Shows or hides an element of text when a link is clicked
  */
@@ -47,6 +62,7 @@ function showAlertFor(text, style, extraText='') {
     });
 }
 
+
 /**
  * Handler to allow search of the ontologies table
  */
@@ -63,6 +79,7 @@ let hasChanged = false;
  * Handler to show popup when you leave the page, only if the code editor has unsaved changes.
  */
 window.addEventListener('beforeunload', (event) => {
+  get_commit_btn.disabled=true;
   if (hasChanged) {
     event.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
   }
@@ -128,7 +145,6 @@ if (document.getElementById("code")) {
     }
   });
 
-
   /**
    * Add our custom hinting function to the editor
    */
@@ -161,11 +177,56 @@ if (document.getElementById("code")) {
   editor.on("changes", function() {
     get_commit_btn().disabled = true;
     hasChanged = true;
+    set_draft(false);
     editor.scrollIntoView(what={line: editor.getCursor().line, ch: 0}, margin=12);
   });
 
+
+  /**
+   * Activate context-sensitive help on any navigation
+   */
+  editor.on("cursorActivity", function (cm, event) {
+    contextSensitiveHelp(editor);
+  });
 }
 
+/**
+ *  Display context-sensitive help while navigating the editor
+ */
+var contextSensitiveHelp = function(editor) {
+  var cursor = editor.getCursor();
+  var getContext = function() {
+    /* Finds the nearest root-level directive above the current line (if one exists) and returns its
+       name. */
+    var lineNum = cursor.line;
+    var matches = /^(\w+):/.exec(editor.getLine(lineNum));
+    while (!matches && lineNum > 0) {
+      matches = /^(\w+):/.exec(editor.getLine(--lineNum));
+    }
+    return matches && matches[1];
+  };
+
+  var context = getContext();
+
+  //Get the edit JSON schema
+  var keyList = Object.keys(editing_schema['properties']);
+  var keyListLength = keyList.length;
+
+  //Context-sensitive help based on schema
+  for (var i = 0; i < keyListLength; i++) {
+    var keyValue = keyList[i];
+    if (context === keyValue) {
+      $("#help-area").show();
+      if (editing_schema['properties'][keyValue]['description'] !== undefined) {
+        $("#help-area").html(keyValue + ": "+ editing_schema['properties'][keyValue]['description']);
+      } else {
+        $("#help-area").html(keyValue);
+      }
+    }
+  }
+
+
+}
 
 /**
  * Generates completion hints depending on the current cursor position of the yaml file
@@ -229,74 +290,158 @@ var purlYamlHint = function(editor, options) {
   // the letters that have been typed so far.
   var prevString = thisLine.slice(0, currStart);
   var context = getContext();
-  if (prevString === '') {
-    return {list: pruneReplacementList([{displayText: 'base_redirect:', text: 'base_redirect: '},
-                                        {displayText: 'base_url:', text: 'base_url: '},
-                                        {displayText: 'entries:', text: 'entries:\n- '},
-                                        {displayText: 'example_terms:', text: 'example_terms:\n- '},
-                                        {displayText: 'idspace:', text: 'idspace: '},
-                                        {displayText: 'products:', text: 'products:\n- '},
-                                        {displayText: 'term_browser:', text: 'term_browser: '},
-                                        {displayText: 'tests:', text: 'tests:\n- from: \n  to: '}]),
-            from: from, to: to};
+
+  //Get the edit JSON schema
+  var keyList = Object.keys(editing_schema['properties']);
+  var keyListLength = keyList.length;
+
+  //Autocomplete suggestions (code completion) based on schema
+  var listItems = []; //Start with an empty array
+  for (var i = 0; i < keyListLength; i++) {
+    var keyValue = keyList[i];
+    var keySchema = editing_schema['properties'][keyValue];
+    if (keySchema['suggest'] === undefined
+           || editing_schema ['properties'][keyValue]['suggest'] === true) {
+      //Top-level suggestions
+      if (prevString === '') {
+           var displayTextStr = keyValue+":";
+           var replacementTextStr = keyValue+':';
+           //Use the schema annotated suggestion if there is one, else build it
+           if (keySchema['suggestion'] !== undefined) {
+              if ( keySchema['type']=='array' ) {
+                replacementTextStr += '\n- '+keySchema['suggestion'];
+              } else if (keySchema['type'] == 'object') {
+                replacementTextStr += '\n '+keySchema['suggestion'];
+              } else {
+                replacementTextStr += ' '+keySchema['suggestion'];
+              }
+           } else if ( keySchema['type']=='array' ) {
+               if (keySchema['items']['type'] === 'object' &&
+                    keySchema['items']['properties'] !== undefined ) {
+                      replacementTextStr += ' \n- ';
+                      var subKeyList = Object.keys(keySchema['items']['properties']);
+                      var subKeyListLength = subKeyList.length;
+                      for (var j=0; j<subKeyListLength; j++) {
+                         var subKeyValue = subKeyList[j];
+                         replacementTextStr += subKeyValue+': \n  ';
+                      }
+               } else {
+                      replacementTextStr += '\n- ';
+               }
+           } else if (keySchema['type'] === 'object') {
+              if (keySchema['properties'] !== undefined ) {
+                  replacementTextStr += '\n  ';
+                  var subKeyList = Object.keys(keySchema['properties']);
+                  var subKeyListLength = subKeyList.length;
+                  for (var j=0; j<subKeyListLength; j++) {
+                     var subKeyValue = subKeyList[j];
+                     replacementTextStr += subKeyValue+': \n  ';
+                  }
+              } else {
+                  replacementTextStr += ' \n ';
+              }
+           } else if (keySchema['type'] === 'string' &&
+              keySchema['enum'] !== undefined) {
+                var subKeyList = keySchema['enum'];
+                replacementTextStr += ' '+subKeyList[0];
+           } else {
+              replacementTextStr += ' ';
+           }
+        listItems.push({displayText: displayTextStr, text: replacementTextStr});
+      } else if (prevString === keyValue+": ") { //Second level enum suggestions
+          if (keySchema['type'] === 'string') {
+              if (keySchema['enum'] !== undefined ) {
+                  var subKeyList = keySchema['enum'];
+                  var subKeyListLength = subKeyList.length;
+                  for (var j=0; j<subKeyListLength; j++) {
+                     var subKeyValue = subKeyList[j];
+                     listItems.push({displayText: subKeyValue, text: subKeyValue});
+                  }
+              }
+          }
+      } else if ( context === keyValue && ( /^$/.test(prevString) || /^-\s+$/.test(prevString) ||
+             /^\s+$/.test(prevString) || /^\s\s+$/.test(prevString) ) ) {   //Second level suggestions for arrays and objects
+          if (keySchema['type'] === 'object') {
+              if (keySchema['properties'] !== undefined ) {
+                  var subKeyList = Object.keys(keySchema['properties']);
+                  var subKeyListLength = subKeyList.length;
+                  for (var j=0; j<subKeyListLength; j++) {
+                     var subKeyValue = subKeyList[j];
+                     listItems.push({displayText: subKeyValue+":", text: subKeyValue+": "});
+                  }
+              }
+          } else if (keySchema['type'] === 'array') {
+              if (keySchema['items']['properties'] !== undefined ) {
+                  var subKeyList = Object.keys(keySchema['items']['properties']);
+                  var subKeyListLength = subKeyList.length;
+                  for (var j=0; j<subKeyListLength; j++) {
+                     var subKeyValue = subKeyList[j];
+                     if (keySchema['items']['properties'][subKeyValue]['type'] === 'string'
+                      && keySchema['items']['properties'][subKeyValue]['enum'] !== undefined ) {
+                        var subSubKeyList = keySchema['items']['properties'][subKeyValue]['enum'];
+                        listItems.push({displayText: subKeyValue+":", text: subKeyValue+": "+subSubKeyList[0]});
+                     } else if (keySchema['items']['properties'][subKeyValue]['type'] === 'array'
+                      && keySchema['items']['properties'][subKeyValue]['items']['properties'] !== undefined ) {
+                        var subSubKeyList = Object.keys(keySchema['items']['properties'][subKeyValue]['items']['properties']);
+                        var subSubKeyListLength = subSubKeyList.length;
+                        var replacementTextStr = subKeyValue+": \n";
+                        for (var k=0; k<subSubKeyListLength; k++) {
+                            var subSubKeyValue = subSubKeyList[k];
+                            replacementTextStr += '  '+subSubKeyValue+": \n";
+                        }
+                        listItems.push({displayText: subKeyValue+":", text: replacementTextStr});
+                     } else {
+                        listItems.push({displayText: subKeyValue+":", text: subKeyValue+": "});
+                     }
+                  }
+              }
+          } else if (keySchema['suggestion'] !== undefined ){
+              suggestion = keySchema['suggestion'];
+              suggRegex = new RegExp("^"+suggestion);
+              if (! suggRegex.test(currWord)) {
+                  listItems.push({displayText: suggestion, text: suggestion});
+              }
+          }
+      }
+      //Third level suggestions for objects nested within arrays
+      if (  keySchema['type']=='array' &&
+          keySchema['items']['type'] === 'object' &&
+          keySchema['items']['properties'] !== undefined ) {
+              var subKeyList = Object.keys(keySchema['items']['properties']);
+              var subKeyListLength = subKeyList.length;
+              for (var j=0; j<subKeyListLength; j++) {
+                 var subKeyValue = subKeyList[j];
+                 var subKeyRegex = new RegExp('^\\s+'+subKeyValue+':\\s+$');
+                 if (keySchema['items']['properties'][subKeyValue]['type'] === 'array'
+                    && keySchema['items']['properties'][subKeyValue]['items']['properties'] !== undefined) {
+                    if (subKeyRegex.test(prevString) && context === keyValue) {
+                        var subSubKeyList = Object.keys(keySchema['items']['properties'][subKeyValue]['items']['properties']);
+                        var subSubKeyListLength = subSubKeyList.length;
+                        for (var k=0; k<subSubKeyListLength; k++) {
+                            var subSubKeyValue = subSubKeyList[k];
+                            listItems.push({displayText: subSubKeyValue+":", text: subSubKeyValue+": "});
+                        }
+                    }
+                 } else if ( keySchema['items']['properties'][subKeyValue]['type'] === 'string'
+                        && 'enum' in keySchema['items']['properties'][subKeyValue] ) {
+                    if (subKeyRegex.test(prevString) && context === keyValue) {
+                        var subSubKeyList = keySchema['items']['properties'][subKeyValue]['enum'];
+                        var subSubKeyListLength = subSubKeyList.length;
+                        for (var k=0; k<subSubKeyListLength; k++) {
+                            var subSubKeyValue = subSubKeyList[k];
+                            listItems.push({displayText: subSubKeyValue, text: subSubKeyValue});
+                        }
+                    }
+                 }
+              }
+          }
+      //end of third level suggestions
+    }
   }
-  else if (/^term_browser:\s+$/.test(prevString)) {
-    return {list: pruneReplacementList([{displayText: 'ontobee', text: 'ontobee'},
-                                        {displayText: 'custom', text: 'custom'}]),
+
+  return {list: pruneReplacementList(listItems),
             from: from, to: to};
-  }
-  else if (/^base_url:\s+$/.test(prevString) && !(/^\/obo\//.test(currWord))) {
-    return {list: pruneReplacementList([{displayText: '/obo/', text: '/obo/'}]),
-            from: from, to: to};
-  }
-  else if (/^-\s+$/.test(prevString) && context === 'tests') {
-    return {list: pruneReplacementList([{displayText: 'from:', text: 'from: \n  to: '},
-                                        {displayText: 'to:', text: 'to: '}]),
-            from: from, to: to};
-  }
-  else if (/^\s*-\s+from:\s+$/.test(prevString) && (context === 'tests' || context === 'entries') &&
-           !(/^\//.test(currWord))) {
-    return {list: pruneReplacementList([{displayText: '/', text: '/'}]),
-            from: from, to: to};
-  }
-  else if (/^\s+to:\s+$/.test(prevString) && (context === 'tests' || context === 'entries') &&
-           !(/^(https?|ftp):\/\//.test(currWord))) {
-    return {list: pruneReplacementList([{displayText: 'http://', text: 'http://'},
-                                        {displayText: 'https://', text: 'https://'},
-                                        {displayText: 'ftp://', text: 'ftp://'},]),
-            from: from, to: to};
-  }
-  else if (/^-\s+$/.test(prevString) && context === 'entries') {
-    return {list: pruneReplacementList([{displayText: 'exact:', text: 'exact: \n  replacement: '},
-                                        {displayText: 'prefix:', text: 'prefix: \n  replacement: '},
-                                        {displayText: 'regex:', text: 'regex: \n  replacement: '}]),
-            from: from, to: to};
-  }
-  else if (prevString === '  ' && context === 'entries') {
-    return {list: pruneReplacementList([{displayText: 'replacement:', text: 'replacement: '},
-                                        {displayText: 'status:', text: 'status: '},
-                                        {displayText: 'tests:', text: 'tests:\n  - from: \n    to: '}]),
-            from: from, to: to};
-  }
-  else if (/^-\s+(exact|prefix):\s+$/.test(prevString) && context === 'entries' &&
-           !(/^\//.test(currWord))) {
-    return {list: pruneReplacementList([{displayText: '/', text: '/'}]),
-            from: from, to: to};
-  }
-  else if (/^\s+replacement:\s+$/.test(prevString) && context === 'entries' &&
-           !(/^(https?|ftp):\/\//.test(currWord))) {
-    return {list: pruneReplacementList([{displayText: 'http://', text: 'http://'},
-                                        {displayText: 'https://', text: 'https://'},
-                                        {displayText: 'ftp://', text: 'ftp://'},]),
-            from: from, to: to};
-  }
-  else if (/^\s+status:\s+$/.test(prevString) && context === 'entries' &&
-           !(/^(permanent|temporary|see other):\/\//.test(currWord))) {
-    return {list: pruneReplacementList([{displayText: 'permanent', text: 'permanent'},
-                                        {displayText: 'temporary', text: 'temporary'},
-                                        {displayText: 'see other', text: 'see other'}]),
-            from: from, to: to};
-  }
+
 };
 
 /**
@@ -326,13 +471,13 @@ var validate = function(filename, editor_type) {
   }
   if (!actual_idspace) {
     showAlertFor("Validation failed: \'" + idspace_name + ": \' is required", "alert-danger") ;
-    get_commit_btn().disabled = true;
+    get_commit_btn().disabled = true; //Don't enable "submit as draft" option for ID validation failure
     return;
   }
   else if (actual_idspace[1] !== expected_idspace) {
     showAlertFor("Validation failed: \'" + idspace_name + ": " + actual_idspace[1] +
       "\' does not match the expected value: \'" + expected_idspace + "\'", "alert-danger")  ;
-    get_commit_btn().disabled = true;
+    get_commit_btn().disabled = true; //Don't enable "submit as draft" option for ID validation failure
     return;
   }
 
@@ -350,21 +495,25 @@ var validate = function(filename, editor_type) {
          try { //Parse JSON if possible, use "result type" to decide message
             var response = JSON.parse(request.responseText);
             if (response.result_type === 'error') {
-                alertText = 'Validation failed';
+                alertText = 'Validation failed ';
                 alertLevel = "alert-danger";
-                get_commit_btn().disabled = true;
+                get_commit_btn().disabled = false;
+                set_draft(true);
             } else if (response.result_type === 'warning') {
-                alertText = 'Warning';
+                alertText = 'Warning ';
                 alertLevel = "alert-warning";
                 get_commit_btn().disabled = false;
+                set_draft(false);
             } else if (response.result_type === 'info') {
-                alertText = 'Information';
+                alertText = 'Information ';
                 alertLevel = "alert-info";
                 get_commit_btn().disabled = false;
+                set_draft(false);
             } else {
                 alertText='Unknown response type: ' + response.result_type;
                 alertLevel="alert-danger";
                 get_commit_btn().disabled = true;
+                set_draft(false);
             }
             // If the line number is valid, then add it to the message
             if (response.line_number) {
@@ -394,10 +543,12 @@ var validate = function(filename, editor_type) {
                 alertText = "Validation successful";
                 alertLevel = "alert-success";
                 get_commit_btn().disabled = false;
+                set_draft(false);
             } else if (request.status === 400) {
                 alertText = 'Validation failed';
                 alertLevel = "alert-danger";
-                get_commit_btn().disabled = true;
+                get_commit_btn().disabled = false;
+                set_draft(true);  //Enable "submit as draft" option
             }
         }
         showAlertFor(alertText,alertLevel,alertTextDetail);
@@ -428,7 +579,7 @@ var add_config = function(filename, editor_type, issueNumber, addIssueLink) {
   }
   // Get a confirmation from the user:
   var modal = bootbox.dialog({
-      message: $(".form-content").html(),
+      message: $("#message-box").html(),
       title: "Please describe the new configuration you would like to add: " +
       projectName,
         buttons: {
@@ -515,6 +666,7 @@ var add_config = function(filename, editor_type, issueNumber, addIssueLink) {
                 request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
                 request.send('filename=' + filename +
                              '&commit_msg=' + msgTitle +
+                             '&draft=' + draft +
                              '&code=' + encodeURIComponent(code) +
                              '&editor_type=' + editor_type +
                              '&long_msg='+ msgBody )
@@ -544,11 +696,12 @@ var update_config = function(filename,editor_type) {
   else if (editor_type == 'purl') {
     $("#descr").attr('value','Updating PURL configuration for '+ projectName);
   }
+
   // Get a confirmation from the user:
   var modal = bootbox.dialog({
     title: "You are about to submit changes. Please describe the changes you have made to " +
       filename.toUpperCase().substring(0, filename.lastIndexOf('.')),
-    message: $(".form-content").html(),
+    message: $("#message-box").html(),
     buttons: {
       confirm: {
         label: 'Submit',
@@ -610,9 +763,10 @@ var update_config = function(filename,editor_type) {
                 request.setRequestHeader('Content-type', 'application/x-www-form-urlencoded');
                 request.send('filename=' + filename +
                              '&commit_msg=' + commit_msg +
+                             '&draft='+ draft +
                              '&code=' + encodeURIComponent(code) +
-                             '&editor_type='+editor_type) +
-                             '&long_msg=' + msgBody
+                             '&editor_type='+editor_type +
+                             '&long_msg=' + msgBody)
                 $("*").css("cursor", "progress");
           }
         }

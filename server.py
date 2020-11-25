@@ -7,7 +7,11 @@ import jsonschema
 import logging
 import re
 import requests
-import yaml
+
+from io import StringIO
+from ruamel.yaml import YAML
+from ruamel.yaml.error import YAMLError
+from ruamel.yaml.constructor import DuplicateKeyError
 
 from datetime import datetime
 from flask import (
@@ -25,8 +29,10 @@ from flask import (
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlencode
 from urllib.request import urlopen
+
+yaml = YAML()  # For parsing yaml files
 
 # To run in development mode, do:
 # export FLASK_APP=server.py
@@ -81,7 +87,7 @@ editor_types = {
 try:
     ontology_md = urlopen(app.config["ONTOLOGY_METADATA_URL"])
     if ontology_md.getcode() == 200:
-        ontology_md = yaml.load(ontology_md.read(), Loader=yaml.SafeLoader)["ontologies"]
+        ontology_md = yaml.load(ontology_md.read())["ontologies"]
 except Exception as e:
     logger.error(f"Could not retrieve ontology metadata: {e}")
     ontology_md = {}
@@ -96,18 +102,17 @@ except Exception as e:
     logger.error(f"Could not retrieve PURL schema: {e}")
     purl_schema = {}
 
-# Load the set of REGISTRY validation schemas:
+# Load the REGISTRY validation schema:
 try:
-    registry_schemas = {}
-    for schema_file in app.config["REGISTRY_SCHEMA_FILES"]:
-        schema_name = schema_file.replace(".json", "")
-        registry_schema_text = urlopen(app.config["REGISTRY_SCHEMA_DIR"] + schema_file)
-        if registry_schema_text.getcode() == 200:
-            registry_schema = json.load(registry_schema_text)
-            registry_schemas[schema_name] = registry_schema
+    registry_schema_text = urlopen(app.config["REGISTRY_SCHEMA"])
+    if registry_schema_text.getcode() == 200:
+        registry_schema = json.load(registry_schema_text)
 except Exception as e:
     logger.error(f"Could not retrieve REGISTRY schema: {e}")
-    registry_schemas = {}
+    registry_schema = {}
+
+
+## GitHub Configuration and Authentication
 
 # URLs and functions used for communicating with GitHub:
 GITHUB_DEFAULT_API_HEADERS = {
@@ -162,6 +167,9 @@ def github_call(method, endpoint, params={}):
 
     fargs = {"url": GITHUB_API_URL + endpoint, "headers": api_headers, "json": params}
     if method == "get":
+        # GET parameters must go in URL - https://developer.github.com/v3/#parameters
+        if len(params) > 0:
+            fargs["url"] = fargs["url"] + "?" + urlencode(params)
         response = requests.get(**fargs)
     elif method == "post":
         response = requests.post(**fargs)
@@ -265,7 +273,9 @@ def github_callback():
         return access_token
 
     if request.args.get("state") != app.config["GITHUB_APP_STATE"]:
-        logger.error("Received wrong state. Aborting authorization due to possible CSRF attack.")
+        logger.error(
+            "Received wrong state. Aborting authorization due to possible CSRF attack."
+        )
         return redirect("/logged_out")
 
     access_token = fetch_access_token(request.args)
@@ -357,6 +367,8 @@ def logout():
     return redirect(url_for("logged_out"))
 
 
+### Main Application
+
 @app.route("/")
 @verify_logged_in
 def index():
@@ -367,20 +379,19 @@ def index():
     purl_configs = github_call(
         "GET",
         f'repos/{app.config["GITHUB_ORG"]}/{editor_types["purl"]["repo"]}/'
-        f'contents/{editor_types["purl"]["dir"]}'
+        f'contents/{editor_types["purl"]["dir"]}',
     )
     if not purl_configs:
         raise Exception("Could not get contents of the purl config directory")
 
-    if dev:
-        # Get all of the available registry config files to edit:
-        registry_configs = github_call(
-            "GET",
-            f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/'
-            f'contents/{editor_types["registry"]["dir"]}'
-        )
-        if not registry_configs:
-            raise Exception("Could not get contents of the registry config directory")
+    # Get all of the available registry config files to edit:
+    registry_configs = github_call(
+        "GET",
+        f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/'
+        f'contents/{editor_types["registry"]["dir"]}',
+    )
+    if not registry_configs:
+        raise Exception("Could not get contents of the registry config directory")
 
     # Add the title, url and description for each config to the records that will be rendered.
     # This information is found in the ontology metadata.
@@ -397,7 +408,7 @@ def index():
                 if o["id"] == config_id and "description" in o
             ]
             config_description = config_description.pop() if config_description else ""
-            if dev and registry_configs:
+            if registry_configs:
                 registries_for_idspace = [
                     x
                     for x in registry_configs
@@ -409,37 +420,35 @@ def index():
                     "id": config_id,
                     "purl_filename": purl_config["name"],
                     "registry_filename": registries_for_idspace[0]["name"]
-                    if dev and len(registries_for_idspace) > 0
+                    if len(registries_for_idspace) > 0
                     else None,
                     "title": config_title,
                     "description": config_description,
                 }
             )
-    if dev:
-        for registry_config in registry_configs:
-            config_id = (
-                registry_config["name"].casefold().replace(app.config["MARKDOWN_EXT"], "")
+
+    for registry_config in registry_configs:
+        config_id = (
+            registry_config["name"].casefold().replace(app.config["MARKDOWN_EXT"], "")
+        )
+        if config_id not in [c["id"] for c in configs]:
+            config_title = [o["title"] for o in ontology_md if o["id"] == config_id]
+            config_title = config_title.pop() if config_title else ""
+            config_description = [
+                o["description"]
+                for o in ontology_md
+                if o["id"] == config_id and "description" in o
+            ]
+            config_description = config_description.pop() if config_description else ""
+            configs.append(
+                {
+                    "id": config_id,
+                    "purl_filename": None,
+                    "registry_filename": registry_config["name"],
+                    "title": config_title,
+                    "description": config_description,
+                }
             )
-            if config_id not in [c["id"] for c in configs]:
-                config_title = [o["title"] for o in ontology_md if o["id"] == config_id]
-                config_title = config_title.pop() if config_title else ""
-                config_description = [
-                    o["description"]
-                    for o in ontology_md
-                    if o["id"] == config_id and "description" in o
-                ]
-                config_description = (
-                    config_description.pop() if config_description else ""
-                )
-                configs.append(
-                    {
-                        "id": config_id,
-                        "purl_filename": None,
-                        "registry_filename": registry_config["name"],
-                        "title": config_title,
-                        "description": config_description,
-                    }
-                )
 
     return render_template("index.jinja2", configs=configs, login=g.user.github_login)
 
@@ -481,7 +490,7 @@ def edit_new():
         return Response("Malformed POST request", status=400)
 
     logger.debug(f"Got editor type: {editor_type}")
-
+    gHubRegex = r"https?://github\.com/([^/]*)/([^/]*)/?"
     issueDetails = None
     if issueNumber:
         # Retrieve all the information from the issue
@@ -490,11 +499,11 @@ def edit_new():
             "GET",
             f'repos/{app.config["GITHUB_ORG"]}/'
             f'{editor_types["registry"]["repo"]}/'
-            f"issues/{issueNumber}"
+            f"issues/{issueNumber}",
         )["body"]
         logger.debug(f"Got issue body {issueData}")
         try:
-            issueDetails = yaml.load(issueData, Loader=yaml.SafeLoader)
+            issueDetails = yaml.load(issueData)
             # Remove keys not needed for the registry metadata
             del issueDetails["related_ontologies"]
             del issueDetails["intended_use"]
@@ -503,38 +512,141 @@ def edit_new():
 
             ontologyLocation = issueDetails["homepage"]
             project_id = issueDetails["id"]
-            githuburl = re.match(r"https?://github\.com/(.*)/(.*)", ontologyLocation)
+            githuburl = re.match(gHubRegex, ontologyLocation)
             if githuburl and github_org is None and github_repo is None:
                 github_org = githuburl.group(1)
                 github_repo = githuburl.group(2)
                 logger.debug(f"Got github details: {github_org}, {github_repo}")
-        except (yaml.YAMLError, TypeError) as err:
-            error_message = format(err)
-            return render_template(
-                "prepare_new_config.jinja2",
-                login=g.user.github_login,
-                project_id=project_id,
-                github_org=github_org,
-                github_repo=github_repo,
-                error_message=f"Not able to parse YAML metadata in the issue {issueNumber}, "
-                              f"due to: <i>{error_message}</i>. Please "
-                              f"<a href='http://github.com/{app.config['GITHUB_ORG']}/"
-                              f"{editor_types['registry']['repo']}/issues/{issueNumber}' "
-                              f"target = '_new'>visit the issue</a> to correct the YAML metadata, "
-                              f"or alternatively enter the required GitHub information below."
-            )
+        except (YAMLError, TypeError) as err:
+            # Try to parse it from the GitHub issue template format
+            if "## Ontology title" in issueData:
+                issueDetails = {}
+                issueDetails["description"] = ""
+                fields = [f.strip() for f in issueData.split("##")]
+                for fieldString in fields:
+                    if fieldString.startswith("Ontology title"):
+                        issueDetails["title"] = fieldString.replace(
+                            "Ontology title", ""
+                        ).strip()
+                    elif fieldString.startswith("Requested ID space"):
+                        project_id = fieldString.replace("Requested ID space", "").strip()
+                        issueDetails["id"] = project_id
+                    elif fieldString.startswith("Ontology location"):
+                        issueDetails["homepage"] = fieldString.replace(
+                            "Ontology location", ""
+                        ).strip().split()[0]
+                        logger.debug(
+                            f"Looking for github details in {issueDetails['homepage']}"
+                        )
+                        githuburl = re.match(gHubRegex, issueDetails["homepage"])
+                        if githuburl:
+                            logger.debug(f"Match object {githuburl}")
+                            github_org = githuburl.group(1)
+                            github_repo = githuburl.group(2)
+                            logger.debug(
+                                f"Got github details: '{github_org}', '{github_repo}'"
+                            )
+                    elif fieldString.startswith("Contact person"):
+                        lines = fieldString.replace("Contact person", "").split("\n")
+                        for line in lines:
+                            if line.strip().startswith("Name:"):
+                                name = line.replace("Name:", "").strip()
+                            elif line.strip().startswith("Email address:"):
+                                email = line.replace("Email address:", "").strip()
+                            elif line.strip().startswith("GitHub username:"):
+                                github = line.replace("GitHub username:", "").strip()
+                        contact = {"label": name, "email": email, "github": github}
+                        issueDetails["contact"] = contact
+                    elif fieldString.startswith("Issue tracker"):
+                        issueDetails["tracker"] = fieldString.replace(
+                            "Issue tracker", ""
+                        ).strip()
+                    elif fieldString.startswith(
+                        "What domain is the ontology intended to cover?"
+                    ):
+                        issueDetails["domain"] = fieldString.replace(
+                            "What domain is the ontology intended to cover?", ""
+                        ).strip()
+                    elif fieldString.startswith("Ontology license"):
+                        trimmed = fieldString.replace("[ ] CC0", "")
+                        trimmed = trimmed.replace("[ ] CC-BY", "")
+                        trimmed = trimmed.replace("[ ] Other", "")
+                        trimmed = trimmed.replace("[X]", "")
+                        trimmed = trimmed.replace("[x]", "")
+                        url = None
+                        label = None
+                        if "CC0" in trimmed:
+                            url = "http://creativecommons.org/publicdomain/zero/1.0/"
+                            label = "CC-0"
+                        elif "CC-BY" in trimmed:
+                            url = "http://creativecommons.org/licenses/by/4.0/"
+                            label = "CC-BY 4.0"
+                        elif trimmed.strip():
+                            label = trimmed.strip()
+                        licenseInfo = {"url": url, "label": label}
+                        issueDetails["license"] = licenseInfo
 
-    if dev and editor_type is None:  # First step
+                logger.debug(
+                    f"Got issue details from parsed issue template: {issueDetails}"
+                )
+
+            else:  # Can't parse this issue with any strategy, something has gone wrong.
+                issues = {}
+                issue_list = github_call(
+                    "GET",
+                    f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/issues',
+                    params={"state": "open", "labels": "new ontology"},
+                )
+                for issue in issue_list:
+                    number = issue["number"]
+                    title = issue["title"]
+                    logger.debug(f"Got issue: {number}, {title}")
+                    issues[number] = title
+                error_message = format(err)
+                return render_template(
+                    "prepare_new_config.jinja2",
+                    login=g.user.github_login,
+                    project_id=project_id,
+                    github_org=github_org,
+                    github_repo=github_repo,
+                    error_message=f"Not able to parse metadata in the issue {issueNumber}, "
+                    f"due to: <i>{error_message}</i>. Please "
+                    f"<a href='http://github.com/{app.config['GITHUB_ORG']}/"
+                    f"{editor_types['registry']['repo']}/issues/{issueNumber}' "
+                    f"target = '_new'>visit the issue</a> to correct the YAML metadata, "
+                    f"or alternatively enter the required GitHub information below.",
+                    issueList=issues,
+                    issueNumber=issueNumber,
+                )
+
+    if editor_type is None:  # First step
         try:
             github_call("GET", f"repos/{github_org}/{github_repo}")
         except requests.HTTPError:
+            # Get the issuse list again
+            issues = {}
+            issue_list = github_call(
+                "GET",
+                f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/issues',
+                params={"state": "open", "labels": "new ontology"},
+            )
+            for issue in issue_list:
+                number = issue["number"]
+                title = issue["title"]
+                logger.debug(f"Got issue: {number}, {title}")
+                issues[number] = title
+
             return render_template(
                 "prepare_new_config.jinja2",
                 login=g.user.github_login,
                 project_id=project_id,
                 github_org=github_org,
                 github_repo=github_repo,
-                error_message=f"The GitHub repository at {github_org}/{github_repo} does not exist"
+                error_message=f"Unable to create initial ontology metadata, as "
+                f"the GitHub repository at {github_org}/{github_repo} does not exist. "
+                f" Please enter the GitHub details for your project.",
+                issueList=issues,
+                issueNumber=issueNumber,
             )
         # If issueDetails have not been loaded, populate an empty template
         if issueDetails is None:
@@ -549,22 +661,24 @@ def edit_new():
             issueDetails["contact"] = {
                 "label": "",
                 "email": "",
-                "github_username": g.user.github_login,
+                "github": g.user.github_login,
             }
             issueDetails["license"] = {"url": "", "label": ""}
             issueDetails["description"] = ""
             issueDetails["domain"] = ""
 
         # Generate text for initial registry config
-        registryYamlText = yaml.dump(
+        stringio = StringIO()
+        yaml.dump(
             {
                 "layout": "ontology_detail",
                 **issueDetails,
                 "products": [{"id": f"{project_id.lower()}.owl"}],
                 "activity_status": "active",
             },
-            sort_keys=False,
+            stringio,
         )
+        registryYamlText = stringio.getvalue()
         registryYamlText = app.config["NEW_PROJECT_REGISTRY_TEMPLATE"].format(
             idspace_lower=project_id.lower(),
             yaml_registry_details=registryYamlText,
@@ -580,8 +694,9 @@ def edit_new():
             yaml=registryYamlText,
             issueNumber=issueNumber,
             login=g.user.github_login,
+            schema_file=json.dumps(registry_schema),
         )
-    elif not dev or editor_type == "purl":
+    elif editor_type == "purl":
         # Generate some text to populate the editor initially with,
         # based on the new project template,
         # and then inject it into the jinja2 template for the metadata editor:
@@ -600,6 +715,7 @@ def edit_new():
             yaml=purlYamlText,
             addIssueLink=addIssueLink,
             login=g.user.github_login,
+            schema_file=json.dumps(purl_schema),
         )
     else:
         return Response("Malformed POST request, unknown editor type", status=400)
@@ -617,7 +733,7 @@ def prepare_new():
     issues = {}
     issue_list = github_call(
         "GET",
-        f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/' f"issues",
+        f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/issues',
         params={"state": "open", "labels": "new ontology"},
     )
     for issue in issue_list:
@@ -712,7 +828,7 @@ def new_foundry():
     registry_configs = github_call(
         "GET",
         f'repos/{app.config["GITHUB_ORG"]}/{editor_types["registry"]["repo"]}/'
-        f'contents/{editor_types["registry"]["dir"]}'
+        f'contents/{editor_types["registry"]["dir"]}',
     )
     if not registry_configs:
         raise Exception("Could not get contents of the registry config directory")
@@ -722,7 +838,7 @@ def new_foundry():
     ]
     if idSpace.casefold() in registry_config_ids:
         resultType = "failure"
-        print(f"Non-unique ID requested: {idSpace}")
+        logger.error(f"Non-unique ID requested: {idSpace}")
         return render_template(
             "new_foundry_reg.jinja2",
             login=g.user.github_login,
@@ -746,7 +862,7 @@ def new_foundry():
         )
     # get license URL
     if ontoLicense == "CC-0":
-        licenseURL = "https://creativecommons.org/share-your-work/public-domain/cc0/"
+        licenseURL = "https://creativecommons.org/publicdomain/zero/1.0/"
     elif ontoLicense == "CC-BY":
         licenseURL = "https://creativecommons.org/licenses/by/4.0/"
     else:
@@ -759,7 +875,7 @@ def new_foundry():
     issueDict["contact"] = {
         "label": contactPerson,
         "email": contactEmail,
-        "github_username": contactGitHub,
+        "github": contactGitHub,
     }
     issueDict["license"] = {"url": licenseURL, "label": ontoLicense}
     issueDict["description"] = description
@@ -769,7 +885,9 @@ def new_foundry():
     issueDict["data_source"] = dataSource
     issueDict["remarks"] = remarks
 
-    issueBody = yaml.dump(issueDict, sort_keys=False)
+    stringio = StringIO()
+    yaml.dump(issueDict, stringio)
+    issueBody = stringio.getvalue()
     issueTitle = f"New Ontology Request: {ontologyTitle}"
 
     url = app.config["REGISTRY_REQUEST"]
@@ -781,11 +899,11 @@ def new_foundry():
     try:
         response = github_call("POST", url, issue)
         if response:
-            print(f"Successfully created issue {issueTitle}, response: {response}")
+            logger.debug(f"Successfully created issue {issueTitle}, response: {response}")
             resultType = "success"
         else:
             resultType = "failure"
-            print(f"Could not create issue {issueTitle}")
+            logger.error(f"Could not create issue {issueTitle}")
             return render_template(
                 "new_foundry_reg.jinja2",
                 login=g.user.github_login,
@@ -863,10 +981,12 @@ def edit_config(editor_type, filename):
     config_file = github_call(
         "GET",
         f'repos/{app.config["GITHUB_ORG"]}/{editor_types[editor_type]["repo"]}/'
-        f'contents/{editor_types[editor_type]["dir"]}/{filename}'
+        f'contents/{editor_types[editor_type]["dir"]}/{filename}',
     )
     if not config_file:
         raise Exception(f"Could not get the contents of: {filename}")
+
+    schema_file = purl_schema if editor_type == "purl" else registry_schema
 
     decodedBytes = base64.b64decode(config_file["content"])
     decodedStr = str(decodedBytes, "utf-8")
@@ -877,6 +997,7 @@ def edit_config(editor_type, filename):
         yaml=decodedStr,
         filename=config_file["name"],
         login=g.user.github_login,
+        schema_file=json.dumps(schema_file),
     )
 
 
@@ -891,102 +1012,27 @@ def validate():
     output of the error.
     """
 
-    def handle_schema_error(err, code, result_type):
-        """
-        Given a schema validation error in a block of code, create a JSON message with line
-        number
-        :param err: The schema validation error
-        :param code: The block of code in which the schema validation failed
-        :param result_type: Levels: e.g. 'error', 'warning', 'info'
-        :return: A JSON response object
-        """
-        if result_type == "error":
-            status = 400
-        else:
-            status = 200
-        err_field = list(err.absolute_path)[-1] # last entry
-        error_summary = f"'{err_field}' {(err.schema.get('description') or err.message)}"
-        logger.debug(f"Determining line number for error: {list(err.absolute_path)}")
-        start = 0
-        if not err.absolute_path:
-            start = -1
-        else:
-            for component in err.absolute_path:
-                if type(component) is str:
-                    block_label = component
-                    start = get_error_start(code, start, block_label) + 1
-                    logger.debug(f"Error begins at line {start}")
-                elif type(component) is int:
-                    start = get_error_start(code, start, block_label, component) + 1
-                    logger.debug(f"Error begins at line {start}")
-
-        return (
-            jsonify(
-                {
-                    "result_type": result_type,
-                    "summary": format(error_summary),
-                    "line_number": start,
-                    "details": format(err),
-                }
-            ),
-            status,
-        )
-
-    def get_error_start(code, start, block_label, item=-1):
-        """
-        Given some YAML code and a line to begin searching from within it, then if no item is
-        specified this function returns the line number of the given block_label (a YAML directive
-        of the form '(- )label:') is returned. If an item number n is specified, then the line
-        number corresponding to the nth item within the block is returned instead (where items
-        within a block in the form:
-        - item 1
-        - item 2
-        - etc.)
-        """
-        block_no = f" item #{item + 1} of " if item >= 0 else " "
-        logger.debug(f"Searching from line {start+1} for{block_no}block: '{block_label}'")
-        # Split the long code string into individual lines, and discard everything before `start`:
-        codelines = code.splitlines()[start:]
-        # Lines containing block labels will always be of this form:
-        pattern = r"^\s*-?\s*{}\s*:.*$".format(block_label)
-        # When counting items, we consider only those indented by the same amount,
-        # and use indent_level to keep track of the current indentation level:
-        indent_level = None
-        curr_item = 0
-        block_start_found = False
-        for i, line in enumerate(codelines):
-            # Check to see whether the current line contains the block label we are looking for:
-            matched = re.fullmatch(pattern, line)
-            if matched:
-                block_start_found = True
-                start = start + i
-                logger.debug(f"Found the start of the block: '{line}' at line {start+1}")
-                # If we've not been instructed to search for an item within the block, we're done:
-                if item < 0:
-                    return start
-            elif block_start_found and item >= 0:
-                # If the current line does not contain the block label, then if we have found it
-                # previously, and if we are to search for the nth item within the block, then
-                # do that. If this is the first item, then take note of the indentation level.
-                matched = re.match(r"(\s*)-\s*\w+", line)
-                item_indent_level = len(matched.group(1)) if matched else None
-                if curr_item == 0:
-                    indent_level = item_indent_level
-
-                # Only consider items that fall directly under this block:
-                if item_indent_level == indent_level:
-                    logger.debug(
-                        f"Found item #{curr_item + 1} of block: '{block_label}' at "
-                        f"line {start + i + 1}. Line is: '{line}'"
-                    )
-                    # If we have found the nth item, return the line on which it starts:
-                    if curr_item == item:
-                        return start + i
-                    # Otherwise continue looping:
-                    curr_item += 1
-
-        logger.debug("*** Something went wrong while trying to find the line number ***")
-        return start
+    def find_schema_error_line(keys, yaml_source):
+        logger.debug(f"Trying to determine line number for path {keys}")
+        line_number = -1
+        if err.validator == "additionalProperties":
+            logger.debug("Got additional properties error")
+            m = err.message
+            key = m[
+                m.index("'") + 1 : m.rindex("'")
+            ]  # get the added key name; this is hacky
+            keys.append(key)
+        if len(keys) > 0:
+            subset = yaml_source
+            while len(keys) > 1:
+                subset = subset[
+                    keys.pop(0)
+                ]  # follow the path, stopping with one key left
+            if keys[0] in subset.lc.data:
+                pos = subset.lc.data[keys[0]]  # get ruamel.yaml's line-column information
+                line_number = pos[0] + 1
+                logger.debug(f"at line {pos[0] + 1}, column {pos[1] + 1}")
+        return line_number
 
     if request.form.get("code") is None:
         return Response("Malformed POST request", status=400)
@@ -995,7 +1041,8 @@ def validate():
         code = request.form["code"]
         editor_type = request.form["editor_type"]
         if editor_type == "purl":
-            yaml_source = yaml.load(code, Loader=yaml.SafeLoader)
+            s = purl_schema
+            yaml_source = yaml.load(code)
             jsonschema.validate(yaml_source, purl_schema)
         elif editor_type == "registry":
             results = {}
@@ -1009,47 +1056,69 @@ def validate():
                     status=400,
                 )
             yaml_code = code_sections[1]
-            yaml_source = yaml.load(yaml_code, Loader=yaml.SafeLoader)
-            for s in registry_schemas.values():
-                try:
-                    jsonschema.validate(yaml_source, s)
-                except jsonschema.exceptions.ValidationError as err:
-                    logger.debug(
-                        f"JSON validation error in {list(err.absolute_schema_path)} "
-                        f":: {list(err.relative_schema_path)} "
-                    )
-                    # What is the level and title for this error?
-                    if "level" in err.schema and "title" in err.schema:
-                        result_type = err.schema["level"]
-                        title = err.schema["title"]
-                        logger.debug(
-                            f"Normal approach: got level {result_type} and title {title}"
-                        )
-                    else:
-                        error_path = list(err.absolute_schema_path)
-                        parent_schema = s
-                        if "allOf" in error_path:
-                            parent = error_path[error_path.index("allOf") + 1]
-                            parentSubset = parent_schema["allOf"][parent]
-                            title = parentSubset["title"]
-                            result_type = parentSubset["level"]
-                            logger.debug(
-                                f"Parsing approach: Got level {result_type} and title {title}"
-                            )
-                    if "is_obsolete" in yaml_source and yaml_source["is_obsolete"]:
-                        logger.debug(
-                            "Demoting schema error level for obsolete registry entry"
-                        )
-                        if result_type == "error":
-                            result_type = "warning"
-                        elif result_type == "warning":
-                            result_type = "info"
+            yaml_source = yaml.load(yaml_code)
+            s = registry_schema
+            try:
+                jsonschema.validate(yaml_source, s)
+            except jsonschema.exceptions.ValidationError as err:
+                logger.debug(
+                    f"JSON validation error in {list(err.absolute_schema_path)} "
+                    f":: {list(err.relative_schema_path)} "
+                )
+                title = list(err.absolute_schema_path)[0]  # first entry
+                if title == "required":
+                    field_names = re.findall(r"\'(.*?)\'", err.message)  # Get which field
+                    if len(field_names) > 0:
+                        title = field_names[0]
+                if title == "properties":
+                    title = list(err.absolute_schema_path)[
+                        1
+                    ]  # Which property? Second entry
+                logger.debug(f"Got error title {title}")
+                # What is the level of this error?
+                if "level" in err.schema:
+                    result_type = err.schema["level"]
+                    logger.debug(f"Got error level: {result_type}")
+                else:
+                    logger.debug(f"No error level found in {err.schema}")
+                    result_type = "warning"
 
-                    # result_type = s["level"]
-                    if result_type not in results:
-                        results[result_type] = {}
-                    response = handle_schema_error(err, code, result_type)
-                    results[result_type][title] = response
+                if "is_obsolete" in yaml_source and yaml_source["is_obsolete"]:
+                    logger.debug(
+                        "Demoting schema error level for obsolete registry entry"
+                    )
+                    if result_type == "error":
+                        result_type = "warning"
+                    elif result_type == "warning":
+                        result_type = "info"
+
+                if result_type not in results:
+                    results[result_type] = {}
+
+                logger.debug(err.message)
+                line_number = find_schema_error_line(list(err.absolute_path), yaml_source)
+
+                if result_type == "error":
+                    status = 400
+                else:
+                    status = 200
+                error_summary = err.message
+                if err.absolute_schema_path:
+                    err_descr = err.schema.get("description")
+                    if err_descr:
+                        error_summary = f"{err.message} ({err_descr})"
+                response = (
+                    jsonify(
+                        {
+                            "result_type": result_type,
+                            "summary": format(error_summary),
+                            "line_number": line_number,
+                            "details": format(err),
+                        }
+                    ),
+                    status,
+                )
+                results[result_type][title] = response
             logger.debug(f"Got schema validation results: {results}")
             for result_type in ["error", "warning", "info"]:
                 if (
@@ -1061,20 +1130,46 @@ def validate():
         else:
             return Response(f"Unknown editor type: {editor_type}", status=400)
 
-    except (yaml.YAMLError, TypeError) as err:
+    except (DuplicateKeyError, YAMLError, TypeError) as err:
+        line_number = -1
+        if hasattr(err, "problem_mark"):
+            mark = err.problem_mark
+            logger.debug(f"Error has position: ({mark.line+1}:{mark.column+1})")
+            line_number = mark.line + 1
+        else:
+            logger.debug(f"Error {err} has no associated line number information.")
         return (
             jsonify(
                 {
                     "result_type": "error",
                     "summary": "YAML parsing error",
-                    "line_number": -1,
+                    "line_number": line_number,
                     "details": format(err),
                 }
             ),
             400,
         )
     except jsonschema.exceptions.ValidationError as err:
-        return handle_schema_error(err, code, "error")
+        result_type = "error"
+        logger.debug(err.message)
+        line_number = find_schema_error_line(list(err.absolute_path), yaml_source)
+        status = 400
+        error_summary = err.message
+        if err.absolute_schema_path:
+            err_descr = err.schema.get("description")
+            if err_descr:
+                error_summary = f"{err.message} ({err_descr})"
+        return (
+            jsonify(
+                {
+                    "result_type": result_type,
+                    "summary": format(error_summary),
+                    "line_number": line_number,
+                    "details": format(err),
+                }
+            ),
+            status,
+        )
 
     return Response(status=200)
 
@@ -1138,22 +1233,24 @@ def commit_to_branch(repo, branch, code, rep_dir, filename, commit_msg, file_sha
     if file_sha:
         data["sha"] = file_sha
 
-    response = github_call("PUT", f"repos/{repo}/contents/{rep_dir}/{filename}", params=data)
+    response = github_call(
+        "PUT", f"repos/{repo}/contents/{rep_dir}/{filename}", params=data
+    )
     if not response:
         raise Exception(
             f"Unable to commit addition of {filename} to branch {branch} in {repo}"
         )
 
 
-def create_pr(repo, branch, commit_msg, long_msg=""):
+def create_pr(repo, branch, commit_msg, draft, long_msg=""):
     """
     Create a pull request for the given branch in the given repository in github
     """
-    response = github_call(
-        "POST",
-        f"repos/{repo}/pulls",
-        params={"title": commit_msg, "head": branch, "base": "master", "body": long_msg},
-    )
+    data = {"title": commit_msg, "head": branch, "base": "master", "body": long_msg}
+    if draft == "true":
+        data["draft"] = True
+    logger.debug(f"PR data={data}")
+    response = github_call("POST", f"repos/{repo}/pulls", params=data)
     if not response:
         raise Exception(f"Unable to create PR for branch {branch} in {repo}")
 
@@ -1170,6 +1267,7 @@ def add_config():
     code = request.form.get("code")
     commit_msg = request.form.get("commit_msg")
     editor_type = request.form.get("editor_type")
+    draft = request.form.get("draft")
     long_msg = request.form.get("long_msg")
     if any([item is None for item in [filename, commit_msg, code, editor_type]]):
         return Response("Malformed POST request", status=400)
@@ -1189,7 +1287,7 @@ def add_config():
             commit_msg,
         )
         logger.info(f"Committed addition of {filename} to branch {new_branch} in {repo}")
-        pr_info = create_pr(repo, new_branch, commit_msg, long_msg)
+        pr_info = create_pr(repo, new_branch, commit_msg, draft, long_msg)
         logger.info(f"Created a PR for branch {new_branch} in {repo}")
     except Exception as e:
         return Response(format(e), status=400)
@@ -1208,7 +1306,9 @@ def update_config():
     filename = request.form.get("filename")
     code = request.form.get("code")
     commit_msg = request.form.get("commit_msg")
+    draft = request.form.get("draft")
     editor_type = request.form.get("editor_type")
+    long_msg = request.form.get("long_msg")
 
     if any([item is None for item in [filename, commit_msg, code, editor_type]]):
         return Response("Malformed POST request", status=400)
@@ -1217,7 +1317,7 @@ def update_config():
     curr_contents = github_call(
         "GET",
         f'repos/{app.config["GITHUB_ORG"]}/{editor_types[editor_type]["repo"]}/'
-        f'contents/{editor_types[editor_type]["dir"]}/{filename}'
+        f'contents/{editor_types[editor_type]["dir"]}/{filename}',
     )
     if not curr_contents:
         raise Exception(f"Could not get the contents of: {filename}")
@@ -1251,7 +1351,7 @@ def update_config():
             file_sha,
         )
         logger.info(f"Committed update of {filename} to branch {new_branch} in {repo}")
-        pr_info = create_pr(repo, new_branch, commit_msg)
+        pr_info = create_pr(repo, new_branch, commit_msg, draft, long_msg)
         logger.info(f"Created a PR for branch {new_branch} in {repo}")
     except Exception as e:
         return Response(format(e), status=400)

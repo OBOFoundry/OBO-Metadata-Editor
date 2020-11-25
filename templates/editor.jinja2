@@ -13,17 +13,21 @@
     <script type="text/javascript" src="/3pp/codemirror/mode/yaml/yaml.js"></script>
     <script type="text/javascript" src="/3pp/codemirror/addon/hint/show-hint.js"></script>
 
+    <!-- Autocomplete hint implementation for the editor -->
+    <script type="text/javascript">
+        let editing_schema = {{ schema_file|safe }}
+    </script>
 
 {% endblock %}
 
 {% block content %}
 
   <h4>
-    {% if dev and not existing and editor_type == 'registry'%} Step 2 of 3: {% endif %}
-    {% if dev and not existing and editor_type == 'purl'%} Step 3 of 3: {% endif %}
+    {% if not existing and editor_type == 'registry'%} Step 2 of 3: {% endif %}
+    {% if not existing and editor_type == 'purl'%} Step 3 of 3: {% endif %}
     {% if existing %} Editing {% else %} Adding {% endif %}
     {% set project_id = filename[ 0: filename.index(".") ] %}
-    {% if dev %} {{editor_type}} {% endif %}
+    {{editor_type}}
     project configuration for {{ project_id | upper }}
   </h4>
 
@@ -32,6 +36,7 @@
 
   <textarea id="code" class="hidden">{% if yaml is defined %}{{ yaml }}{% endif %}</textarea>
 
+  </div>
   <div>
     <button id="validate-btn" class="btn btn-primary" onclick="validate('{{ filename }}', '{{ editor_type }}')">
       Validate
@@ -46,7 +51,7 @@
         Add configuration
       </button>
     {% endif %}
-    {% if dev and not existing %}
+    {% if not existing %}
       <button id="next-step-btn" class="btn btn-danger"
               onclick="" disabled>
           {% if editor_type == 'registry' %}
@@ -82,9 +87,13 @@
     </div> <!-- details-area -->
   </div> <!-- status-area -->
 
+  <div id="help-area" class="alert alert-info" role="alert" style="display:none" >
+
+  </div>
+
     <!-- The form that gets displayed on the confirmation box -->
-    <div class="form-content" style="display:none;">
-        <form class="form" role="form">
+  <div id="message-box" class="form-content" style="display:none;">
+      <form class="form" role="form">
           <div class="form-group">
             <label for="commit-msg">Commit message</label>
             <input type="text" class="form-control" id="commit-msg" name="commit-msg">
@@ -93,7 +102,7 @@
             <label for="descr">Detailed description</label>
             <input type="text" class="form-control" id="descr" name="descr">
           </div>
-        </form>
-    </div>
+      </form>
+  </div>
 
 {% endblock %}
