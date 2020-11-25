@@ -111,6 +111,9 @@ except Exception as e:
     logger.error(f"Could not retrieve REGISTRY schema: {e}")
     registry_schema = {}
 
+
+## GitHub Configuration and Authentication
+
 # URLs and functions used for communicating with GitHub:
 GITHUB_DEFAULT_API_HEADERS = {
     "Accept": "application/vnd.github.v3+json",
@@ -363,6 +366,8 @@ def logout():
     session.pop("user_id", None)
     return redirect(url_for("logged_out"))
 
+
+### Main Application
 
 @app.route("/")
 @verify_logged_in
