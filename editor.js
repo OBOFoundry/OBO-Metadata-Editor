@@ -646,6 +646,7 @@ var add_config = function(filename, editor_type, issueNumber, addIssueLink) {
                         nextStepTxt = 'You\'re all done! The PR for the registry config was <a href="'+
                          addIssueLink+'" target="__blank">also</a> successfully submitted.';
                       }
+                      nextStepTxt = nextStepTxt + ' Go back to <a href="/">main page</a>.'
                       showAlertFor('New configuration submitted successfully. It will be ' +
                         'reviewed by a moderator before being added to the repository. Click ' +
                         '<a href="' + prInfo['html_url'] + '" target="__blank">here</a> to view your ' +
